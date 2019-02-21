@@ -215,11 +215,11 @@ In xv6 every program should end with  <code>exit()</code>.
 
 
 
-####[gdb](http://sourceware.org/gdb/current/onlinedocs/gdb/)
+#### [gdb](http://sourceware.org/gdb/current/onlinedocs/gdb/)
 
 
 
-####[x86](http://www.cs.virginia.edu/~evans/cs216/guides/x86.html)
+#### [x86](http://www.cs.virginia.edu/~evans/cs216/guides/x86.html)
 
 ```assembly
 .globl vector64
