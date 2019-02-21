@@ -1,6 +1,6 @@
 # P2a Notes
 
-####segmentation fault with `strcpy`
+#### segmentation fault with `strcpy`
 
 ```C
 char * child_argv[2];
