@@ -49,6 +49,7 @@ mainc(void)
   uartinit();      // serial port
   kvmalloc();      // initialize the kernel page table
   pinit();         // process table
+  levinit();       // init priority level
   tvinit();        // trap vectors
   binit();         // buffer cache
   fileinit();      // file table

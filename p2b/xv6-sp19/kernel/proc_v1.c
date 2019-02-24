@@ -30,7 +30,7 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
-int max_level[] = {1000, 32, 16, 8};
+int max_level[] = {-1, 32, 16, 8};
 int max_wait[] = {500, 320, 160, 0};
 
 static void wakeup1(void *chan);
@@ -107,12 +107,6 @@ update_tick(void)
   }
   release(&ptable.lock);
   proc->ticks[proc->priority]++;
-  if(proc->ticks[proc->priority] == max_level[proc->priority])
-    proc->priority--;
-  if (proc->priority == 0) {  // add to zero queue
-    zque.zero[(zque.first+zque.size)%NPROC] = proc;
-    zque.size++;
-  }
 }
 
 // Look in the process table for an UNUSED proc.
@@ -352,22 +346,6 @@ wait(void)
   }
 }
 
-int
-update_level()
-{
-  int level = 0;
-  struct proc *pl;
-  for(pl = ptable.proc; pl < &ptable.proc[NPROC]; pl++){
-    if(pl->state != RUNNABLE)
-      continue;
-    if(pl->priority > level)
-      level = pl->priority;
-  }
-  acquire(&plevel.lock);
-  plevel.level = level;
-  release(&plevel.lock);
-  return level;
-}
 
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -379,69 +357,69 @@ update_level()
 void
 scheduler(void)
 {
-  struct proc *p, *pprev=initproc;
+  struct proc *p, *pprev = initproc;
 
   for(;;){
-    sti();    // Enable interrupts on this processor.
-
-    // Loop over process table looking for process to run.
+    // Enable interrupts on this processor.
+    sti();
     acquire(&ptable.lock);
-    update_level();
+    int level = 0;
 
-    // if current process runable
-    if((pprev->state == RUNNABLE) && (pprev->priority == plevel.level) &&
-      (pprev->ticks[pprev->priority]<max_level[pprev->priority])){
-      proc = pprev;
-      cprintf("\nflag 0: run current process!\n");
+    cprintf("\nflag 1\n");
 
-      switchuvm(proc);
-      proc->state = RUNNING;
-      cprintf("process chosen to run %s, pid %d\n", proc->name, proc->pid);
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      proc = 0;
-      release(&ptable.lock);
-      continue;
-    }
-
-
-
+    // Loop over the process table to find current highest priority.
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
-
-      update_level();  // update current highest priority
-
-
-      if (plevel.level == 0){
-        for (int i0 = 0; i0 < zque.size; i0++){
-          if(zque.zero[(i0+zque.first)%NPROC]->state == RUNNABLE) {
-            proc = zque.zero[(i0+zque.first)%NPROC];
-            break;
-          }
-        }
-        cprintf("\nflag 3: plevel = 0\n");
-      } else {
-        if(p->priority < plevel.level)
-          continue;
-      }
-
-      cprintf("\nflag 2: %s\n", p->name);
-      cprintf("\nflag 3: %d\n", plevel.level);
-
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      cprintf("process chosen to run %s, pid %d\n", p->name, p->pid);
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      pprev = p;
-      proc = 0;
+      if(p->priority > level){cprintf("\nflag 1.5: level = %d\n", p->priority);
+        level = p->priority;}
     }
-    release(&ptable.lock);
+    acquire(&plevel.lock);
+    plevel.level = level;
+    release(&plevel.lock);
 
+    cprintf("\nflag 2: level %d\n", level);
+
+    if(plevel.level==0){
+      for (int i0 = 0; i0 < zque.size; i0++){
+        if(zque.zero[(i0+zque.first)%NPROC]->state == RUNNABLE) {
+          proc = zque.zero[(i0+zque.first)%NPROC];
+          break;
+        }
+      }
+      cprintf("\nflag 3: \n");
+      goto ctx_swtch;
+    } else {
+      if ((pprev->ticks[pprev->priority]<max_level[pprev->priority])
+        && (pprev->priority == plevel.level)){
+        proc = pprev;
+        goto ctx_swtch;
+      }
+      else if (pprev->ticks[pprev->priority]==max_level[pprev->priority]) {
+        pprev->priority--;
+        if (pprev->priority == 0) {  // add to zero queue
+          zque.zero[(zque.first+zque.size)%NPROC] = pprev;
+          zque.size++;
+        }
+      }
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if ((p->state == RUNNABLE) && (p->priority == plevel.level))
+          proc = p;
+        break;
+      }
+    }
+ctx_swtch:
+    switchuvm(proc);
+    proc->state = RUNNING;
+    cprintf("\ncurrent priority is ", plevel.level);
+    cprintf("process chosen to run %s, pid %d\n", proc->name, proc->pid);
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+    release(&ptable.lock);
   }
 }
 
