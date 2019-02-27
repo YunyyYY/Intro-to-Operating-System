@@ -93,11 +93,7 @@ process chosen to run sh, pid 2
 $
 ```
 
-When boots up, first run the process `initcode`, Even before a shell gets going. Once `init` starting `sh`, pid of `init` becomes 2.
-
-The only way to create a process in unix is `fork()`. The only way to call a shell is to call `fork()` within `init`.
-
-Now, shell is waiting for input, but nothing get printed. Since `sheduler()` only deals with processes that is `RUNNABLE`, and apparently shell is blocked with keyboard input.
+When boots up, first run the process `initcode`, Even before a shell gets going. The only way to create a process in unix is `fork()`. The only way to call a shell is to call `fork()` within `init`. Once `init` starting `sh`, pid of `init` becomes 2. Because at this time, `init` forks a new process, and at first its name is the same as its parent. When `sh` begins to execute, its name changes to "sh". Now, shell is waiting for input, but nothing get printed. Since `sheduler()` only deals with processes that is `RUNNABLE`, and apparently shell is blocked with keyboard input. When a new command is entered, the 
 
 
 
@@ -333,7 +329,9 @@ struct context {
 
 ####`vm.c`
 
-Choose project, find one `RUNNABLE`, set to `RUNNING`, swicth page table using `switchuvm`, defined in `kernel/vm.c`. **h/w** means hardware. Switch TSS and h/w page table to correspond to process p.
+##### switchuvm
+
+Swicth page table using `switchuvm`, defined in `kernel/vm.c`. **h/w** means hardware. Switch TSS and h/w page table to correspond to process p.
 
 **TSS**: the **task state segment** (TSS) is a special structure on x86-based computers which holds information about a task. It is used by the **operating system kernel** for task management. Specifically, the following information is stored in the TSS: 
 
@@ -343,8 +341,7 @@ Choose project, find one `RUNNABLE`, set to `RUNNING`, swicth page table using `
 - Previous TSS link
 
 ```C
-void
-switchuvm(struct proc *p)
+void switchuvm(struct proc *p)
 {
   pushcli();
   cpu->gdt[SEG_TSS] = SEG16(STS_T32A, &cpu->ts, sizeof(cpu->ts)-1, 0);
@@ -359,14 +356,18 @@ switchuvm(struct proc *p)
 }
 ```
 
+##### switchkvm
+
 Switch h/w page table register to the kernel-only page table, for when no process is running.
 
 ```C
 void switchkvm(void) { lcr3(PADDR(kpgdir));}     // switch to the kernel page table 
 
-// include/x86.h
+// include/x86.h, setting page table base register.
 static inline void lcr3(uint val) { asm volatile("movl %0,%%cr3" : : "r" (val));}
 ```
+
+
 
 ####`swtch.S` (contex switch)
 
@@ -408,7 +409,9 @@ swtch:
 
 ```
 
-`sched` called `swtch` to switch to `cpu->scheduler`, the per-CPU scheduler context.
+#### `trap.c`
+
+
 
 #### `proc.c`
 
@@ -474,7 +477,7 @@ void forkret(void)
 }
 ```
 
-#####  fork
+#####  fork (131)
 
 `fork()` create a new process copying p as the parent. Sets up stack to return as if from system call. **Caller must set state of returned proc to `RUNNABLE`. **
 
@@ -483,10 +486,9 @@ int fork(void)
 {
   int i, pid;
   struct proc *np;
-
-  // Allocate process.
-  if((np = allocproc()) == 0)
-    return -1;
+  									// Allocate process. *allocproc* will find a slot in 
+  if((np = allocproc()) == 0)		// ptable and set up kernel stack, trap frame, context
+    return -1;						// for this new baby process.
 
   // Copy process state from p.
   if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
@@ -606,7 +608,7 @@ void yield(void)
 
 ##### sched
 
-`sched` enter scheduler.  Must hold only `ptable.lock` and have changed `proc->state`.
+`sched` called `swtch` to switch to `cpu->scheduler`, the per-CPU scheduler context. `sched` enter scheduler.  Must hold only `ptable.lock` and have changed `proc->state`.
 
 ```C
 void sched(void)
@@ -627,10 +629,54 @@ void sched(void)
 }
 ```
 
-Set up first user process. `userinit` calls `setupkvm` to create a page table for the process with (at first)
-mappings only for memory that the kernel uses. 
+##### scheduler
+
+Per-CPU process scheduler. Each CPU calls `scheduler()` after setting itself up. Scheduler never returns.  It loops, doing:
+
+- choose a process to run
+- swtch to start running that process
+- eventually that process transfers control via `swtch` back to the scheduler.
+
+Timer interrupt is raises by h/w, and os just handles it.
+
+```C
+void scheduler(void)
+{
+  struct proc *p;
+
+  for(;;){
+    sti();  // Enable interrupts on this processor.
+
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, proc->context);   // jump out of the scheduler context, enter
+      // the proc context. After swtch, not in scheduler anymore. Goes to proc context.  
+      // Need to come back. Way to come back: timer interrupt (trap), which calls yield().
+      switchkvm();   /// when back to scheduler context, restore registers.
+        
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
+    }
+    release(&ptable.lock);
+
+  }
+}
+```
 
 ##### userinit
+
+Set up first user process. `userinit` calls `setupkvm` to create a page table for the process with (at first)
+mappings only for memory that the kernel uses. 
 
 ```C
 void userinit(void)
@@ -779,13 +825,101 @@ int main(void)
     }
     while((wpid=wait()) >= 0 && wpid != pid)   // wait is in parent process. If it caught
       printf(1, "zombie!\n");                  // one of its child, return that child's 
-  }											   // pid. If no child, return -1.
-}
+  }											   // pid. If no child, return -1. >= 0 means
+}											   // some child program returns.
 ```
+
+& means let a project runs in the background.
+
+```sh
+process chosen to run init, pid 2
+process chosen to run init, pid 2
+process chosen to run sh, pid 2
+$ ls &; ls
+process chosen to run sh, pid 2
+process chosen to run sh, pid 3		# pid=3 is  running in the background, and since there
+process chosen to run sh, pid 3 	# is only one cpu, it wait for pid=5 to run first
+process chosen to run sh, pid 4
+process chosen to run sh, pid 5
+process chosen to run sh, pid 3
+process chosen to run sh, pid 5
+... # omit run pid 5 parts here
+process chosen to run sh, pid 5		# it takes time for sh to get ls execute. 
+process chosen to run sh, pid 3		# at the time when pid=5 is exec, 3 gets chance to run
+process chosen to run ls, pid 5		# now 5 starts to write to stdout, => block
+.              1 1 512
+..             1 1 512
+README         2 2 1793
+cat            2 3 9448
+echo           2 4 8992
+forktest       2 5 5784
+grep           2 6 10568
+init           2 7 9292
+process chosen to run sh, pid 3
+process chosen to run ls, pid 5
+kill           2 8 9008
+process chosen to run sh, pid 3
+process chosen to run ls, pid 5
+ln             2 9 8984
+process chosen to run sh, pid 3		# when pid 5 is dealing with output, 3 could run!
+process chosen to run sh, pid 3
+process chosen to run sh, pid 3
+process chosen to run sh, pid 3
+process chosen to run sh, pid 3
+process chosen to run sh, pid 3
+.              1 1 512
+process chosen to run ls, pid 5
+ls             2 10 10556
+mkdir          2 11 9076
+rm             2 12 9056
+sh             2 13 16180
+spin           2 14 8964
+stressfs       2 15 9216
+process chosen to run ls, pid 3
+..             1 1 512
+process chosen to run ls, pid 5
+tprocess chosen to run ls, pid 3
+README         2 2 1793
+cat            2 3 9448
+echo           2 4 8992
+forktest       2 5 5784
+grep           2 6 10568
+init           2 7 9292
+kill           2 8 9008
+ln             2 9 8984
+ls             2 10 10556
+mkdir          2 11 9076
+process chosen to run ls, pid 5
+ester         2 16 8928
+usertests      2 17 34828
+wc             2 18 9780
+zombie         2 19 8784
+console        3 20 0
+process chosen to run init, pid 1
+zombie!
+process chosen to run ls, pid 3
+rm             2 12 9056
+process chosen to run ls, pid 3
+sh             2 13 16180
+spin           2 14 8964
+stressfs       2 15 9216
+tester         2 16 8928
+usertests      2 17 34828
+wc             2 18 9780
+zombie         2 19 8784
+console        3 20 0
+process chosen to run sh, pid 2
+process chosen to run sh, pid 2
+$ 
+```
+
+
+
+
 
 #### `sh.c`
 
-The first user program calls `sh`, which will contimue to run command programs.
+The first user program calls `sh`, which will continue to run command programs.
 
 ```C
 int main(void)
@@ -813,4 +947,65 @@ runcmd(struct cmd *cmd)
   }
   exit();
 }
+```
+
+
+
+## Write system call
+
+In user mode, the write system function is declared as
+
+```C
+int write(int, void*, int);
+
+int sys_write(void)
+{
+  // ...
+  if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argptr(1, &p, n) < 0)
+    return -1;
+  return filewrite(f, p, n);
+}
+```
+
+To handle the system call with arguments, other kernel functions are needed to access and parse the parameters. `write` utilizes three functions. The first one deals with a file descriptor, which we do not need in this project.
+
+```C
+// sysfile.c
+// Fetch the nth word-sized system call argument as a file descriptor
+// and return both the descriptor and the corresponding struct file.
+static int argfd(int n, int *pfd, struct file **pf);
+```
+
+The second and third one are defined in `syscall.c`.
+
+```C
+// Fetch the nth 32-bit system call argument.
+int argint(int n, int *ip)
+{
+  return fetchint(proc, proc->tf->esp + 4 + 4*n, ip);
+}
+
+// Fetch the int at addr from process p.
+int fetchint(struct proc *p, uint addr, int *ip)
+{
+  if(addr >= p->sz || addr+4 > p->sz)
+    return -1;
+  *ip = *(int*)(addr);
+  return 0;
+}
+
+// Fetch the nth word-sized system call argument as a pointer to a block of memory of size 
+// n bytes.  Check that the pointer lies within the process address space.
+int argptr(int n, char **pp, int size)
+{
+  int i;
+  
+  if(argint(n, &i) < 0)
+    return -1;
+  if((uint)i >= proc->sz || (uint)i+size > proc->sz)
+    return -1;
+  *pp = (char*)i;
+  return 0;
+}
+
 ```
