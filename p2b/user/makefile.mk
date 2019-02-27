@@ -10,12 +10,14 @@ USER_PROGS := \
 	ln\
 	ls\
 	mkdir\
+	mlfq\
 	pinfo\
 	rm\
 	sh\
 	spin\
 	stressfs\
 	tester\
+	test2\
 	usertests\
 	wc\
 	zombie

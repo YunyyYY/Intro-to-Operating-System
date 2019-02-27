@@ -54,6 +54,8 @@ get_pstat(struct pstat *ps)
       ps->ticks[idx][i] = p->ticks[i];
       ps->wait_ticks[idx][i] = p->wait_ticks[i];
     }
+    if (ps->ticks[idx][3] == 0)
+      ps->ticks[idx][3] = 1;
   }
 }
 
@@ -97,8 +99,8 @@ update_tick(void)
       p->wait_ticks[p->priority]++;
       if((p->priority<3) && (p->wait_ticks[p->priority]
                              == max_wait[p->priority])){
-        p->wait_ticks[p->priority]=0;
-        p->ticks[p->priority]=0;
+        p->wait_ticks[p->priority ]=0;
+        // p->ticks[p->priority]=0;
         if (p->priority==0)  // move from zero queue
           deque(p);
         p->priority++;
@@ -107,8 +109,11 @@ update_tick(void)
   }
   release(&ptable.lock);
   proc->ticks[proc->priority]++;
-  if(proc->ticks[proc->priority] == max_level[proc->priority])
-    proc->priority--;
+  if((proc->ticks[proc->priority] > 0) &&
+          (proc->ticks[proc->priority]%max_level[proc->priority] == 0)){
+    if (proc->priority > 0)
+      proc->priority--;
+  }
   if (proc->priority == 0) {  // add to zero queue
     zque.zero[(zque.first+zque.size)%NPROC] = proc;
     zque.size++;
@@ -392,11 +397,11 @@ scheduler(void)
     if((pprev->state == RUNNABLE) && (pprev->priority == plevel.level) &&
       (pprev->ticks[pprev->priority]<max_level[pprev->priority])){
       proc = pprev;
-      cprintf("\nflag 0: run current process!\n");
+      // cprintf("\nflag 0: run current process!\n");
 
       switchuvm(proc);
       proc->state = RUNNING;
-      cprintf("process chosen to run %s, pid %d\n", proc->name, proc->pid);
+      //cprintf("process chosen to run %s, pid %d\n", proc->name, proc->pid);
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
 
@@ -404,8 +409,6 @@ scheduler(void)
       release(&ptable.lock);
       continue;
     }
-
-
 
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
@@ -421,19 +424,18 @@ scheduler(void)
             break;
           }
         }
-        cprintf("\nflag 3: plevel = 0\n");
+        // cprintf("\nflag 2: plevel = 0\n");
       } else {
         if(p->priority < plevel.level)
           continue;
       }
 
-      cprintf("\nflag 2: %s\n", p->name);
-      cprintf("\nflag 3: %d\n", plevel.level);
+      // cprintf("\nflag 3: %s, %d\n", p->name, plevel.level);
 
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      cprintf("process chosen to run %s, pid %d\n", p->name, p->pid);
+      //cprintf("process chosen to run %s, pid %d\n", p->name, p->pid);
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
 
@@ -441,7 +443,6 @@ scheduler(void)
       proc = 0;
     }
     release(&ptable.lock);
-
   }
 }
 
