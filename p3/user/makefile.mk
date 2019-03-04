@@ -10,6 +10,7 @@ USER_PROGS := \
 	ln\
 	ls\
 	mkdir\
+	null\
 	p3\
 	rm\
 	sh\

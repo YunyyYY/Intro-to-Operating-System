@@ -80,15 +80,15 @@ mappages(pde_t *pgdir, void *la, uint size, uint pa, int perm)
   char *a, *last;
   pte_t *pte;
   
-  a = PGROUNDDOWN(la);  // get starting address
-  last = PGROUNDDOWN(la + size - 1);  // get end address
+  a = PGROUNDDOWN(la);
+  last = PGROUNDDOWN(la + size - 1);
   for(;;){
-    pte = walkpgdir(pgdir, a, 1); // get i1 row address with walkpgdir
+    pte = walkpgdir(pgdir, a, 1);
     if(pte == 0)
       return -1;
-    if(*pte & PTE_P)  // make sure it's not used
+    if(*pte & PTE_P)
       panic("remap");
-    *pte = pa | perm | PTE_P;  // write pa in i1, mark valid, with permission
+    *pte = pa | perm | PTE_P;
     if(a == last)
       break;
     a += PGSIZE;
@@ -195,7 +195,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
     panic("inituvm: more than a page");
   mem = kalloc();
   memset(mem, 0, PGSIZE);
-  mappages(pgdir, 0, PGSIZE, PADDR(mem), PTE_W|PTE_U);
+  mappages(pgdir, (void *)FPAGE, PGSIZE, PADDR(mem), PTE_W|PTE_U);
   memmove(mem, init, sz);
 }
 
@@ -244,7 +244,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
-    memset(mem, 0, PGSIZE);  //  clear all parts in memory to 0.
+    memset(mem, 0, PGSIZE);
     mappages(pgdir, (char*)a, PGSIZE, PADDR(mem), PTE_W|PTE_U);
   }
   return newsz;
@@ -306,12 +306,9 @@ copyuvm(pde_t *pgdir, uint sz)
 
   if((d = setupkvm()) == 0)
     return 0;
-  for(i = 0; i < sz; i += PGSIZE){
+  for(i = FPAGE; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void*)i, 0)) == 0)
       panic("copyuvm: pte should exist");
-    // cprintf("vm.c 312: here? pid is %d\n", proc->pid);
-    if (proc->pid > 1 && i<16384)
-      continue;
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);

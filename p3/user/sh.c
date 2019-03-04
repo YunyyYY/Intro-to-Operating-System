@@ -154,7 +154,7 @@ main(void)
       break;
     }
   }
-  // printf(1, "sh 157: reach here\n");
+  
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
@@ -169,7 +169,6 @@ main(void)
       runcmd(parsecmd(buf));
     wait();
   }
-  // printf(1, "sh 172: reach here\n");
   exit();
 }
 

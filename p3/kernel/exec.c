@@ -32,14 +32,11 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  sz = 0;
-  if(proc->pid>1)
-    sz = 16384;
+  sz = FPAGE;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
-      goto bad;  // get informatio of ph
-    if(proc->pid>1)
-      ph.va = 16384;
+      goto bad;
+    ph.va = FPAGE;
     if(ph.type != ELF_PROG_LOAD)
       continue;
     if(ph.memsz < ph.filesz)
