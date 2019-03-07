@@ -13,12 +13,20 @@
 // library system call function. The saved user %esp points
 // to a saved program counter, and then the first argument.
 
+// if((uint)i >= proc->cstack-PGSIZE) {
+//      if (growstack() < 0) { // PF within one page, allocate a new one
+//        cprintf("syscall.c:70: fail growstack\n");
+//        return -1;
+//      }
+
 // Fetch the int at addr from process p.
 int
 fetchint(struct proc *p, uint addr, int *ip)
 {
    uint tmp = p->stack_top;
-   if(addr >= tmp || addr+4 > tmp)
+   if(addr >= tmp || addr+4 > tmp || addr < FPAGE)
+    return -1;
+  if((addr >= p->sz || addr+4 > p->sz) && addr < p->cstack)
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -29,17 +37,23 @@ fetchint(struct proc *p, uint addr, int *ip)
 // Returns length of string, not including nul.
 int
 fetchstr(struct proc *p, uint addr, char **pp)
-{
+{//sys_dummy();
   char *s, *ep;
   uint tmp = p->stack_top;
 
-  if(addr >= tmp)
+  if(addr >= tmp || addr < FPAGE)
+    return -1;
+  if(addr >= p->sz && addr < p->cstack)
     return -1;
   *pp = (char*)addr;
   ep = (char*)tmp;
   for(s = *pp; s < ep; s++)
-    if(*s == 0)
-      return s - *pp;
+    if(*s == 0){
+      int size = s - *pp;
+      if((addr >= p->sz || addr+size > p->sz) && addr < p->cstack)
+        return -1;
+      return size;
+    }
   return -1;
 }
 
@@ -64,12 +78,6 @@ argptr(int n, char **pp, int size)
   uint tmp = proc->stack_top;
 
   if ((uint)i<proc->cstack) {
-//    if((uint)i >= proc->cstack-PGSIZE) {
-//      if (growstack() < 0) { // PF within one page, allocate a new one
-//        cprintf("syscall.c:70: fail growstack??\n");
-//        return -1;
-//      }
-//    } else
     if ((uint)i >= proc->sz || (uint)i+size>proc->sz || (uint)i<FPAGE)
       return -1;
   }

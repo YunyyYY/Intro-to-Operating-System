@@ -5,6 +5,7 @@ USER_PROGS := \
 	echo\
 	forktest\
 	grep\
+	heap\
 	init\
 	kill\
 	ln\
@@ -16,6 +17,7 @@ USER_PROGS := \
 	rm\
 	sh\
 	spin\
+	stack2\
 	stressfs\
 	tester\
 	usertests\

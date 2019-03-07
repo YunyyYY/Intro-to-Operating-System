@@ -6,14 +6,19 @@
 int
 main(int argc, char *argv[])
 {
-    if (argc < 2)
-        exit();
-    printf(1, "input is %s\n", argv[1]);
+    int ppid = getpid();
 
-//    /* at zero */
-//    arg = (char*) 651263;   // dummy();
-//    if(write(fd, arg, 10) == -1)
-//        printf(1, "caught\n");
+    if (fork() == 0) {
+        uint * nullp = (uint*)0;
+        printf(1, "null dereference: ");
+        printf(1, "%x %x\n", nullp, *nullp);
+        // this process should be killed
+        printf(1, "TEST FAILED\n");
+        kill(ppid);
+        exit();
+    } else {
+        wait();
+    }
 
     exit();
 }

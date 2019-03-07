@@ -112,8 +112,8 @@ growproc(int n)
   sz = proc->sz;   // used to increase heep
 
   if(n > 0){
-    if(sz + n + 5*PGSIZE >proc->cstack){
-      panic("gap between stack and heap not enough");
+    if(sz + n + 5*PGSIZE > proc->cstack){
+      cprintf("heap: memory not enough\n");
       return -1;
     }
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
@@ -132,12 +132,12 @@ growproc(int n)
 int
 growstack(void)
 {
-  uint sz;
+  uint sz;cprintf("stack: heap: %d, stack: %d\n", proc->sz, proc->cstack);
   
   sz = proc->cstack;   // used to increase heep
 
-  if(sz - 5*PGSIZE < proc->sz){
-    panic("gap between stack and heap not enough");
+  if(sz <= (proc->sz + 5*PGSIZE)){
+    cprintf("stack: memory not enough\n");
     return -1;
   }
   if((sz = allocuvm(proc->pgdir, sz - PGSIZE, sz)) == 0)
