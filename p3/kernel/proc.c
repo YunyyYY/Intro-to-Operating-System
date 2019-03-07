@@ -85,6 +85,7 @@ userinit(void)
     panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->sz = PGSIZE + FPAGE;
+  p->stack_top = PGSIZE + FPAGE;   // stack of userinit set the same
   memset(p->tf, 0, sizeof(*p->tf));
   p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
   p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
@@ -108,8 +109,13 @@ growproc(int n)
 {
   uint sz;
   
-  sz = proc->sz;
+  sz = proc->sz;   // used to increase heep
+
   if(n > 0){
+    if(sz + n + 5*PGSIZE >proc->cstack){
+      panic("gap between stack and heap not enough");
+      return -1;
+    }
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
       return -1;
   } else if(n < 0){
@@ -117,6 +123,27 @@ growproc(int n)
       return -1;
   }
   proc->sz = sz;
+  switchuvm(proc);
+  return 0;
+}
+
+// Grow current process's memory by n bytes.
+// Return 0 on success, -1 on failure.
+int
+growstack(void)
+{
+  uint sz;
+  
+  sz = proc->cstack;   // used to increase heep
+
+  if(sz - 5*PGSIZE < proc->sz){
+    panic("gap between stack and heap not enough");
+    return -1;
+  }
+  if((sz = allocuvm(proc->pgdir, sz - PGSIZE, sz)) == 0)
+    return -1;
+
+  proc->cstack = sz - PGSIZE;
   switchuvm(proc);
   return 0;
 }
@@ -134,14 +161,20 @@ fork(void)
   if((np = allocproc()) == 0)
     return -1;
 
+  struct proc *p =  proc;
+  if (p->pid  <  0)
+    i = 0;
+
   // Copy process state from p.
-  if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
+  if((np->pgdir = copyuvm(proc->pgdir, proc->sz, proc->cstack)) == 0){
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
     return -1;
   }
   np->sz = proc->sz;
+  np->stack_top = proc->stack_top;
+  np->cstack = proc->cstack;
   np->parent = proc;
   *np->tf = *proc->tf;
 

@@ -11,6 +11,7 @@ USER_PROGS := \
 	ls\
 	mkdir\
 	null\
+	ovf\
 	p3\
 	rm\
 	sh\
@@ -83,7 +84,7 @@ user/bin:
 
 # user programs
 user/bin/%: user/%.o $(USER_LIBS) | user/bin
-	$(LD) $(LDFLAGS) $(USER_LDFLAGS) --output=$@ $< $(USER_LIBS)
+	$(LD) $(LDFLAGS) $(USER_LDFLAGS) --output=$@ $< $(USER_LIBS) -g
 
 # forktest has less library code linked in - needs to be small
 # in order to be able to max out the proc table.
@@ -92,17 +93,17 @@ user/bin/forktest: user/forktest.o user/ulib.o user/usys.o | user/bin
 
 # default recipe for object files
 user/%.o: user/%.c
-	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(CFLAGS) $(USER_CFLAGS) -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(CFLAGS) $(USER_CFLAGS) -c -o $@ $< -g
 
 user/%.o: user/%.S
-	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(ASFLAGS) $(USER_ASFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(ASFLAGS) $(USER_ASFLAGS) -c $< -o $@ -g
 
 # default recipes for dependency files
 user/%.d: user/%.c
 	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(CFLAGS) $(USER_CFLAGS) \
-		-M -MG $< -MF $@ -MT $@ -MT $(<:.c=.o)
+		-M -MG $< -MF $@ -MT $@ -MT $(<:.c=.o) -g
 
 user/%.d: user/%.S
 	$(CC) $(CPPFLAGS) $(USER_CPPFLAGS) $(ASFLAGS) $(USER_ASFLAGS) \
-		-M -MG $< -MF $@ -MT $@ -MT $(<:.S=.o)
+		-M -MG $< -MF $@ -MT $@ -MT $(<:.S=.o) -g
 

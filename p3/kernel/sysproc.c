@@ -47,6 +47,10 @@ sys_sbrk(void)
   int addr;
   int n;
 
+  struct proc *p =  proc;
+  if (p->pid  <  0)
+    n = 0;
+
   if(argint(0, &n) < 0)
     return -1;
   addr = proc->sz;
@@ -88,3 +92,11 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_dummy(void)
+{
+  cprintf("sysproc.c:96: dummy system call\n");
+  return 0;
+}
+

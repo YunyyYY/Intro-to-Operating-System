@@ -10,7 +10,8 @@ char *argv[] = { "sh", 0 };
 int
 main(void)
 {
-  int pid, wpid;
+  int pid, wpid;  // dummy();
+  // at this point, user pipe not set yet, cannot printf.
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -20,7 +21,7 @@ main(void)
   dup(0);  // stderr
 
   for(;;){
-    printf(1, "init: starting sh\n");
+    printf(1, "init: starting sh\n");     // dummy();
     pid = fork();
     if(pid < 0){
       printf(1, "init: fork failed\n");

@@ -1,0 +1,195 @@
+starting build
+
+**********************************************************************
+
+Test build
+build xv6 using make
+
+**********************************************************************
+
+test build PASSED
+ (build xv6 using make)
+
+starting null
+
+**********************************************************************
+
+Test null
+null pointer dereference should kill process
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+null dereference: pid 4 tester: trap 14 err 4 on cpu 1 eip 0x403e addr 0x0--kill proc
+TEST PASSED
+
+test null PASSED (10 of 10)
+ (null pointer dereference should kill process)
+
+starting null2
+
+**********************************************************************
+
+Test null2
+any dereference from first two pages should fault
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+bad dereference (0x1001): pid 4 tester: trap 14 err 4 on cpu 1 eip 0x403e addr 0x1001--kill proc
+TEST PASSED
+
+
+test null2 PASSED (10 of 10)
+ (any dereference from first two pages should fault)
+
+starting null3
+
+**********************************************************************
+
+Test null3
+any dereference from first two pages should fault
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+bad dereference (0x2001): pid 4 tester: trap 14 err 4 on cpu 1 eip 0x403e addr 0x2001--kill proc
+TEST PASSED
+
+
+test null3 PASSED (5 of 5)
+ (any dereference from first two pages should fault)
+
+starting null4
+
+**********************************************************************
+
+Test null4
+any dereference from first two pages should fault
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+bad dereference (0x3001): pid 4 tester: trap 14 err 4 on cpu 1 eip 0x403e addr 0x3001--kill proc
+TEST PASSED
+
+
+test null4 PASSED (5 of 5)
+ (any dereference from first two pages should fault)
+
+starting bounds
+
+**********************************************************************
+
+Test bounds
+syscall argument checks (null page, code/heap boundaries)
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+TEST PASSED
+
+
+test bounds PASSED (10 of 10)
+ (syscall argument checks (null page, code/heap boundaries))
+
+starting stack
+
+**********************************************************************
+
+Test stack
+stack should be at high end of address space
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+TEST PASSED
+
+
+test stack PASSED (10 of 10)
+ (stack should be at high end of address space)
+
+starting bounds2
+
+**********************************************************************
+
+Test bounds2
+syscall argument checks (stack boundaries)
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+TEST PASSED
+
+
+test bounds2 PASSED (5 of 5)
+ (syscall argument checks (stack boundaries))
+
+starting bounds_str
+
+**********************************************************************
+
+Test bounds_str
+syscall argument checks (string arg)
+
+**********************************************************************
+
+xv6...
+lapicinit: 1 0xfee00000
+cpu1: starting
+cpu0: starting
+init: starting sh
+$ tester
+tester
+unexpected trap 14 from cpu 1 eip 104d7f (cr2=0x0)
+cpu1: panic: trap
+ 106209 105eb
+
+test bounds_str FAILED (0 of 10)
+ (syscall argument checks (string arg))
+ xv6 kernel panic
+
+Skipped 14 tests.
+To keep testing after failing a test, use flag '-c' or '--continue'

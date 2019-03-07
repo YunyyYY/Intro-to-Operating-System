@@ -17,7 +17,8 @@
 int
 fetchint(struct proc *p, uint addr, int *ip)
 {
-  if(addr >= p->sz || addr+4 > p->sz)
+   uint tmp = p->stack_top;
+   if(addr >= tmp || addr+4 > tmp)
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -30,11 +31,12 @@ int
 fetchstr(struct proc *p, uint addr, char **pp)
 {
   char *s, *ep;
+  uint tmp = p->stack_top;
 
-  if(addr >= p->sz)
+  if(addr >= tmp)
     return -1;
   *pp = (char*)addr;
-  ep = (char*)p->sz;
+  ep = (char*)tmp;
   for(s = *pp; s < ep; s++)
     if(*s == 0)
       return s - *pp;
@@ -58,8 +60,23 @@ argptr(int n, char **pp, int size)
   
   if(argint(n, &i) < 0)
     return -1;
-  if((uint)i >= proc->sz || (uint)i+size > proc->sz)
+
+  uint tmp = proc->stack_top;
+
+  if ((uint)i<proc->cstack) {
+//    if((uint)i >= proc->cstack-PGSIZE) {
+//      if (growstack() < 0) { // PF within one page, allocate a new one
+//        cprintf("syscall.c:70: fail growstack??\n");
+//        return -1;
+//      }
+//    } else
+    if ((uint)i >= proc->sz || (uint)i+size>proc->sz || (uint)i<FPAGE)
+      return -1;
+  }
+  // else, if out of range,
+  else if((uint)i >= tmp || (uint)i+size > tmp)
     return -1;
+
   *pp = (char*)i;
   return 0;
 }
@@ -103,6 +120,7 @@ static int (*syscalls[])(void) = {
 [SYS_wait]    sys_wait,
 [SYS_write]   sys_write,
 [SYS_uptime]  sys_uptime,
+[SYS_dummy]   sys_dummy,
 };
 
 // Called on a syscall trap. Checks that the syscall number (passed via eax)
@@ -113,6 +131,12 @@ syscall(void)
   int num;
   
   num = proc->tf->eax;
+
+  // fake part, just used to see output;
+  struct proc *p =  proc;
+  if (p->pid  <  0)
+    num = proc->tf->eax;
+
   if(num > 0 && num < NELEM(syscalls) && syscalls[num] != NULL) {
     proc->tf->eax = syscalls[num]();
   } else {

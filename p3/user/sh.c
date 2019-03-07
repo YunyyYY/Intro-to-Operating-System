@@ -183,8 +183,7 @@ int
 fork1(void)
 {
   int pid;
-  
-  pid = fork();
+  pid = fork();  // printf(1, "sh:188: fork succeed\n");dummy();
   if(pid == -1)
     panic("fork");
   return pid;
@@ -329,7 +328,7 @@ parsecmd(char *s)
   char *es;
   struct cmd *cmd;
 
-  es = s + strlen(s);
+  es = s + strlen(s);  // this just points to the end of string s.
   cmd = parseline(&s, es);
   peek(&s, es, "");
   if(s != es){

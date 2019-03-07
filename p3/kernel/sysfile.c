@@ -344,7 +344,7 @@ sys_chdir(void)
 int
 sys_exec(void)
 {
-  char *path, *argv[MAXARG];
+  char *path, *argv[MAXARG];  // argv an array, not initialized
   int i;
   uint uargv, uarg;
 
@@ -353,12 +353,12 @@ sys_exec(void)
   }
   memset(argv, 0, sizeof(argv));
   for(i=0;; i++){
-    if(i >= NELEM(argv))
+    if(i >= NELEM(argv))  // NELEM(argv) is max number of  element in argv.
       return -1;
     if(fetchint(proc, uargv+4*i, (int*)&uarg) < 0)
       return -1;
     if(uarg == 0){
-      argv[i] = 0;
+      argv[i] = 0;  // NELEM(ARGV) is max of parameter, may not be that much.
       break;
     }
     if(fetchstr(proc, uarg, &argv[i]) < 0)
