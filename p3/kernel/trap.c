@@ -75,18 +75,17 @@ trap(struct trapframe *tf)
             cpu->id, tf->cs, tf->eip);
     lapiceoi();
     break;
-  case T_PGFLT:  // cprintf("detect page fault\n")
+  case T_PGFLT:// cprintf("detect page fault\n")
     if (rcr2() < proc->cstack && rcr2() >= proc->cstack-PGSIZE){
       if(growstack() == -1){
         cprintf("PF: no free page\n");
         proc->killed = 1;
-      }
+      }  // cprintf("allocate new stack\n");
+    } else {
+      proc->killed = 1;
     }
-    break;  // cprintf("allocate new stack\n");
+    break;
   default:
-    if (tf->trapno == T_PGFLT) {
-
-    }
     if(proc == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.
       cprintf("unexpected trap %d from cpu %d eip %x (cr2=0x%x)\n",

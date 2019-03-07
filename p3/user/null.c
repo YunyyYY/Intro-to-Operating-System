@@ -1,7 +1,7 @@
+/* null pointer dereference should kill process */
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-#include "fcntl.h"
 
 int
 main(int argc, char *argv[])
@@ -20,5 +20,6 @@ main(int argc, char *argv[])
         wait();
     }
 
+    printf(1, "TEST PASSED\n");
     exit();
 }
