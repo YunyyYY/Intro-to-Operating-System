@@ -131,8 +131,8 @@ growproc(int n)
 // Return 0 on success, -1 on failure.
 int
 growstack(void)
-{
-  uint sz;cprintf("stack: heap: %d, stack: %d\n", proc->sz, proc->cstack);
+{    // cprintf("stack: heap: %d, stack: %d\n", proc->sz, proc->cstack);
+  uint sz;
   
   sz = proc->cstack;   // used to increase heep
 

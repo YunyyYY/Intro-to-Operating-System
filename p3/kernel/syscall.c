@@ -55,32 +55,34 @@ fetchstr(struct proc *p, uint addr, char **pp)
     if (!(idx && p->share[idx-1]))
       return -1;
   }
-  // if(addr >= tmp || addr < FPAGE)
+
   if(addr >= tmp)
     return -1;
   if(addr >= p->sz && addr < p->cstack)
     return -1;
   *pp = (char*)addr;
   ep = (char*)tmp;
-  for(s = *pp; s < ep; s++)
-    if(*s == 0){
-      int size = s - *pp;
 
-      if (addr < FPAGE){
-        uint end_addr = addr + size;
-        if(end_addr < FPAGE) {
-          idx = (uint) end_addr / PGSIZE;
-          if (!(idx && proc->share[idx - 1]))
-            return -1;
-        }
-        if (end_addr >=FPAGE)
+  int size;
+  for(s = *pp; s < ep; s++){
+    size = s - *pp;
+
+    if (addr < FPAGE){
+      uint end_addr = addr + size;
+      if(end_addr < FPAGE) {
+        idx = (uint) end_addr / PGSIZE;
+        if (!(idx && proc->share[idx - 1]))
           return -1;
       }
-
-      if((addr >= p->sz || addr+size > p->sz) && addr < p->cstack)
+      if (end_addr >=FPAGE)
         return -1;
+    }
+    if(addr < p->sz && (addr+size >= p->sz))
+      return -1;
+    if(*s == 0){
       return size;
     }
+  }
   return -1;
 }
 

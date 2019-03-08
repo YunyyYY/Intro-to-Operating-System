@@ -1,63 +1,101 @@
+/* syscall argument checks (string arg) */
 #include "types.h"
 #include "stat.h"
 #include "user.h"
 #include "fcntl.h"
-#include "param.h"
+
+#undef NULL
+#define NULL ((void*)0)
 
 #define assert(x) if (x) {} else { \
-  printf(1, "%s: %d ", __FILE__, __LINE__); \
-  printf(1, "assert failed (%s)\n", # x); \
-  printf(1, "TEST FAILED\n"); \
-  exit(); \
-}
-
-void
-test_failed()
-{
-    printf(1, "TEST FAILED\n");
-    exit();
-}
-
-void
-test_passed()
-{
-    printf(1, "TEST PASSED\n");
-    exit();
+   printf(1, "%s: %d ", __FILE__, __LINE__); \
+   printf(1, "assert failed (%s)\n", # x); \
+   printf(1, "TEST FAILED\n"); \
+   exit(); \
 }
 
 int
 main(int argc, char *argv[])
 {
-    char *ptr1, *ptr2;//, *arg;
-    int i;
+    char *str;
+    int fd;
 
-    ptr1 = shmget(0);
-    assert(ptr1 != NULL);
+    /* grow the heap a bit (move sz around) */
+    assert((int)sbrk(4096 * 60) != -1);
 
-    ptr2 = shmget(0);
-    assert(ptr2 != NULL);
+    /* at zero */
+    str = (char*) 0x0;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
 
-    assert(ptr1 == ptr2);
-    char arr[4] = "tmp";
-    for (i = 0; i < 4; i++) {
-        *(ptr2+i) = arr[i];
-    }
+    /* within null page */
+    str = (char*) 0x400;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
 
-    //argstr
-    int fd = open(ptr2, O_WRONLY|O_CREATE);
+    /* below code/heap */
+    str = (char*) 0x3fff;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
+
+    /* at data */
+    str = "foo";
+    fd = open(str, O_WRONLY|O_CREATE);
     assert(fd != -1);
+    assert(unlink(str) != -1);
 
-    //argptr
-    int n = write(fd, ptr2, 10);
-    assert(n != -1);
+    /* at heap top */
+    str = (char*) sbrk(0) - 4;
+    strcpy(str, "tmp");
+    fd = open(str, O_WRONLY|O_CREATE);
+    assert(fd != -1);
+    assert(unlink(str) != -1);
 
-    //making sure edge case is checked
-    n = write(fd, (char *)(ptr2 + 4094), 10);
-    printf(1, "fd: %d\n", fd);
-    assert (n == -1);
+    /* spanning heap top */
+    str[3] = 'a';
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
 
-    assert(write(fd,(char *)(0x1000 + 400), 1024) != -1);
+    /* above heap top */
+    str += 4;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
 
-    test_passed();
+    uint STACK = 159*4096;
+    uint USERTOP = 160*4096;
+
+    /* below stack */
+    str = (char*) STACK-1;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
+
+    /* at stack */
+    str = (char*) STACK;
+    strcpy(str, "bar");
+    fd = open(str, O_WRONLY|O_CREATE);
+    assert(fd != -1);
+    assert(unlink(str) != -1);
+
+    /* within stack */
+    str = (char*) STACK+1024;
+    strcpy(str, "tmp");
+    fd = open(str, O_WRONLY|O_CREATE);
+    assert(fd != -1);
+    assert(unlink(str) != -1);
+
+    /* at stack top */
+    str = (char*) USERTOP-2;
+    assert(str[0] == '\0');
+    strcpy(str, "x");
+    fd = open(str, O_WRONLY|O_CREATE);
+    assert(fd != -1);
+    assert(unlink(str) != -1);
+    str[0] = '\0';
+
+    /* spanning stack top */
+    str = (char*) USERTOP-1;
+    str[0] = 'a';
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
+
+    /* above stack top */
+    str = (char*) USERTOP;
+    assert(open(str, O_WRONLY|O_CREATE) == -1);
+
+    printf(1, "TEST PASSED\n");
     exit();
 }
+
