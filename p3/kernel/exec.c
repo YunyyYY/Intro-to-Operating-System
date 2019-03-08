@@ -32,6 +32,7 @@ exec(char *path, char **argv)
   if((pgdir = setupkvm()) == 0)
     goto bad;
 
+  // share_vm(pgdir);// memset((void*)0x1000, 0, 3*PGSIZE);
   // Load program into memory.
   sz = FPAGE;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -99,10 +100,8 @@ exec(char *path, char **argv)
   switchuvm(proc);
   freevm(oldpgdir);
 
-  // fake part, just used to see output;
-  struct proc *p =  proc;
-  if (p->pid  <  0)
-    goto bad;
+  for (int i = 0; i < 3; i++)
+    proc->share[i] = 0;
 
   return 0;
 

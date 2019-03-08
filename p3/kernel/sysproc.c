@@ -47,10 +47,6 @@ sys_sbrk(void)
   int addr;
   int n;
 
-  struct proc *p =  proc;
-  if (p->pid  <  0)
-    n = 0;
-
   if(argint(0, &n) < 0)
     return -1;
   addr = proc->sz;
@@ -100,3 +96,11 @@ sys_dummy(void)
   return 0;
 }
 
+int
+sys_shmget(void)
+{
+  int pan;  // page number for shared physical address
+  if(argint(0, &pan) < 0)
+    return -1;
+  return map_shmem(pan);
+}

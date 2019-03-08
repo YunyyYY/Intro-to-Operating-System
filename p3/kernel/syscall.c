@@ -24,7 +24,14 @@ int
 fetchint(struct proc *p, uint addr, int *ip)
 {
    uint tmp = p->stack_top;
-   if(addr >= tmp || addr+4 > tmp || addr < FPAGE)
+   if(addr < FPAGE){
+     int idx = addr/PGSIZE;
+     if (!(idx && p->share[idx-1]))
+       return -1;
+     if (addr+4 >= FPAGE)
+       return -1;
+   }
+   if(addr >= tmp || addr+4 > tmp)  //  || addr < FPAGE)
     return -1;
   if((addr >= p->sz || addr+4 > p->sz) && addr < p->cstack)
     return -1;
@@ -40,8 +47,16 @@ fetchstr(struct proc *p, uint addr, char **pp)
 {//sys_dummy();
   char *s, *ep;
   uint tmp = p->stack_top;
+  uint idx;
 
-  if(addr >= tmp || addr < FPAGE)
+  if(addr < FPAGE){
+    cprintf("flag: 0x%x\n", addr);
+    idx = addr/PGSIZE;
+    if (!(idx && p->share[idx-1]))
+      return -1;
+  }
+  // if(addr >= tmp || addr < FPAGE)
+  if(addr >= tmp)
     return -1;
   if(addr >= p->sz && addr < p->cstack)
     return -1;
@@ -50,6 +65,18 @@ fetchstr(struct proc *p, uint addr, char **pp)
   for(s = *pp; s < ep; s++)
     if(*s == 0){
       int size = s - *pp;
+
+      if (addr < FPAGE){
+        uint end_addr = addr + size;
+        if(end_addr < FPAGE) {
+          idx = (uint) end_addr / PGSIZE;
+          if (!(idx && proc->share[idx - 1]))
+            return -1;
+        }
+        if (end_addr >=FPAGE)
+          return -1;
+      }
+
       if((addr >= p->sz || addr+size > p->sz) && addr < p->cstack)
         return -1;
       return size;
@@ -78,8 +105,21 @@ argptr(int n, char **pp, int size)
   uint tmp = proc->stack_top;
 
   if ((uint)i<proc->cstack) {
-    if ((uint)i >= proc->sz || (uint)i+size>proc->sz || (uint)i<FPAGE)
+    if ((uint)i >= proc->sz || (uint)i+size>proc->sz) // || (uint)i<FPAGE)
       return -1;
+    if((uint)i < FPAGE){
+      int idx = (uint)i/PGSIZE;
+      if (!(idx && proc->share[idx-1]))
+        return -1;
+      int end_i = (uint)i+size;
+      if(end_i < FPAGE){
+        idx = (uint)end_i/PGSIZE;
+        if (!(idx && proc->share[idx-1]))
+          return -1;
+      }
+      if (end_i >= FPAGE)
+        return -1;
+    }
   }
   // else, if out of range,
   else if((uint)i >= tmp || (uint)i+size > tmp)
@@ -129,6 +169,7 @@ static int (*syscalls[])(void) = {
 [SYS_write]   sys_write,
 [SYS_uptime]  sys_uptime,
 [SYS_dummy]   sys_dummy,
+[SYS_shmget]  sys_shmget,
 };
 
 // Called on a syscall trap. Checks that the syscall number (passed via eax)
@@ -139,11 +180,6 @@ syscall(void)
   int num;
   
   num = proc->tf->eax;
-
-  // fake part, just used to see output;
-  struct proc *p =  proc;
-  if (p->pid  <  0)
-    num = proc->tf->eax;
 
   if(num > 0 && num < NELEM(syscalls) && syscalls[num] != NULL) {
     proc->tf->eax = syscalls[num]();

@@ -24,5 +24,6 @@
 #define SYS_sleep  20
 #define SYS_uptime 21
 #define SYS_dummy  22
+#define SYS_shmget 23
 
 #endif // _SYSCALL_H_

@@ -161,10 +161,6 @@ fork(void)
   if((np = allocproc()) == 0)
     return -1;
 
-  struct proc *p =  proc;
-  if (p->pid  <  0)
-    i = 0;
-
   // Copy process state from p.
   if((np->pgdir = copyuvm(proc->pgdir, proc->sz, proc->cstack)) == 0){
     kfree(np->kstack);
@@ -177,6 +173,9 @@ fork(void)
   np->cstack = proc->cstack;
   np->parent = proc;
   *np->tf = *proc->tf;
+
+  for (i = 0; i < 3; i++)
+    np->share[i] = proc->share[i];
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;

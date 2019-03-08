@@ -127,6 +127,7 @@ static struct kmap {
   {(void*)USERTOP,    (void*)0x100000, PTE_W},  // I/O space
   {(void*)0x100000,   data,            0    },  // kernel text, rodata
   {data,              (void*)PHYSTOP,  PTE_W},  // kernel data, memory
+  {(void*)PHYSTOP,    (void*)0x1003000, PTE_W},  // shared memory
   {(void*)0xFE000000, 0,               PTE_W},  // device mappings
 };
 
@@ -184,7 +185,7 @@ switchuvm(struct proc *p)
   popcli();
 }
 
-// Load the initcode into address 0 of pgdir.
+// Load the initcode into address 0x4000 of pgdir.
 // sz must be less than a page.
 void
 inituvm(pde_t *pgdir, char *init, uint sz)
@@ -286,9 +287,9 @@ freevm(pde_t *pgdir)
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, USERTOP, 0);
+  deallocuvm(pgdir, USERTOP, FPAGE);
   for(i = 0; i < NPDENTRIES; i++){
-    if(pgdir[i] & PTE_P)
+    if((pgdir[i]>=FPAGE) & PTE_P)
       kfree((char*)PTE_ADDR(pgdir[i]));
   }
   kfree((char*)pgdir);
@@ -329,6 +330,12 @@ copyuvm(pde_t *pgdir, uint sz_h, uint sz_s)
     memmove(mem, (char*)pa, PGSIZE);
     if(mappages(d, (void*)i, PGSIZE, PADDR(mem), PTE_W|PTE_U) < 0)
       goto bad;
+  }
+  for(i = 0x1000; i < FPAGE; i += PGSIZE){
+    pte = walkpgdir(pgdir, (void*)i, 0);
+    if(*pte == 0)
+      break;
+    mappages(d, (void*)i, PGSIZE, *pte, PTE_W|PTE_U);
   }
   return d;
 
@@ -376,3 +383,31 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   }
   return 0;
 }
+
+uint
+map_shmem(int n)
+{
+  if (n < 0 || n > 2)
+    return 0;
+  uint pa, i;
+  pde_t *pte;
+  pa = PHYSTOP + n*PGSIZE;  // physical address to be shared
+  pa = pa | (PTE_W|PTE_U) | PTE_P;
+  for(i = 0x1000; i < 0x4000; i += PGSIZE){
+    pte = walkpgdir(proc->pgdir, (void*)i, 0);
+    if(pa == *pte)
+      return i;
+    if(*pte == 0){
+      *pte = pa;// | (PTE_W|PTE_U) | PTE_P;
+      proc->share[i/PGSIZE-1] = 1;
+      break;
+    } // cprintf("i = 0x%x, 0x%x\n", i, pte);
+  }
+  return i;
+}
+
+//void
+//share_vm()
+//{
+//  // this check...
+//}

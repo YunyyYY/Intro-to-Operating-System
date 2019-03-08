@@ -21,5 +21,9 @@ main(int argc, char *argv[])
     }
 
     printf(1, "TEST PASSED\n");
+
+//    uint a = (uint)shmget(1);
+//    printf(1, "get address 0x%x\n", a);
+
     exit();
 }
