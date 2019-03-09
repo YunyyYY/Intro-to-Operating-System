@@ -506,7 +506,7 @@ static inline void stosb(void *addr, int data, int cnt) {
 // addr: pgdir, data: 0, cnt: PGSIZE
 ```
 
-This is some assmbler inline instruciton.
+This is some assmbler inline instruciton. It in essnece  set the memory segmentation starting from `addr` with size `cnt` with the value `data`.
 
 Create PTEs for linear addresses starting at `la` that refer to physical addresses starting at `pa`. `la` and size might not be page-aligned.
 
