@@ -1,0 +1,12 @@
+talk read
+talk read
+listen write
+listen write
+talk write
+write read
+write listen
+listen read
+listen listen
+talk read
+read listen
+write talk
