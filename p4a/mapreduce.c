@@ -146,7 +146,7 @@ static void *myRead(void *arg) {
     int file_num;
 
     Mapper map = (Mapper) arg;
-    while(current.value < total_files) {
+    while(1) {
         pthread_mutex_lock(&current.lock);
         file_num  = current.value;
         current.value++;
