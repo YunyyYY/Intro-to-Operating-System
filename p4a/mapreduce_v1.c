@@ -36,7 +36,7 @@ static void freeData(data_t* d) {
 typedef struct __box_t {        // box [key, values]
     char* key;
     data_t* data;               // points to the data list
-    // size_t size;                // number of values in this box
+    size_t size;                // number of values in this box
     struct __box_t* next;       // points to next box, [sorted]
     pthread_mutex_t lock;
     data_t* tmp;                // used during reduce for current
@@ -46,7 +46,7 @@ static void init_box(box_t *b, char* key) {
     b->key = malloc(KEYSIZE * sizeof(char));
     strcpy(b->key, key);
     b->data = NULL;
-    // b->size = 0;
+    b->size = 0;
     b->next = NULL;
     pthread_mutex_init(&b->lock, NULL);
 }
@@ -59,17 +59,20 @@ static void freeBox(box_t *b) {
         vim = b;
         b = b->next;
         free(vim);
+        //  printf("62| freeBox\n");
     }
 
 }
 
 typedef struct __unit_t {       // unit, each is a partition
     box_t* box;                 // [root] of box list for each partition
-    box_t* tmp;                 // try to remember current char*
+    size_t size;                // number of boxes in this unit
     pthread_mutex_t lock;
+    box_t* tmp;
 } unit_t;
 
 static void init_unit(unit_t *u) {
+    u->size = 0;
     u->box = NULL;
     pthread_mutex_init(&u->lock, NULL);
 }
@@ -99,7 +102,7 @@ static box_t* getKey(unit_t *u, char* key) {        //  if key not exist,
             new->next = tmp;
             tmp = new;
         }
-        //u->size += 1;
+        u->size += 1;
     }
     pthread_mutex_unlock(&u->lock);
     return tmp;
@@ -125,7 +128,7 @@ static void addData(box_t *b, char* value) {
         else
             prev->next = new;
     }
-    // b->size += 1;
+    b->size += 1;
     pthread_mutex_unlock(&b->lock);
 }
 
@@ -138,7 +141,6 @@ static int units;
 static fpointer_t current;  // stores current file to be read
 static fpointer_t curunit;  // stores current unit
 static Partitioner getUnit;
-static Reducer myReduce;
 
 static void *myRead(void *arg) {
     int file_num;
@@ -161,39 +163,53 @@ static void setIterBox(box_t* b) {
     b->tmp = b->data;
 }
 
-//static void setIterUnit(unit_t* u) {
-static void* setIterUnit(void* arg) {
-    unit_t* u = (unit_t*) arg;
+static void setIterUnit(unit_t* u) {
     u->tmp = u->box;
     box_t* b = u->box;
     while (b != NULL) {
         setIterBox(b);
         b = b->next;
     }
-    return NULL;
 }
 
 char* getNext(char* key, int index) {  // the data returned is  dynamic!
-    box_t *b = unit[index].tmp;
-    if (strcmp(key, b->key) != 0) {
-        b = getKey(&unit[index], key);
-    }
-        if (b->tmp == NULL)
-            return NULL;
+    box_t *b = getKey(&unit[index], key);
+    if (b->tmp == NULL)
+        return NULL;
     char* data  = b->tmp->value;
     b->tmp = b->tmp->next;
     return data;
 }
 
 static void *mySum(void *arg) {
-    int idx = *(int *)arg;
-    box_t *b = unit[idx].box; // printf("? %d\n", idx);
-    while (b != NULL){
-        unit->tmp = b;
-        myReduce(b->key, getNext, idx);
-        b = b->next;
+    Reducer reduce = (Reducer) arg;
+    box_t *b;
+    int i;
+    int idx, par;
+    while (1){
+        pthread_mutex_lock(&curunit.lock);
+        idx = curunit.value;
+        curunit.value = (idx + 1) % units;
+        pthread_mutex_unlock(&curunit.lock);
+        b = NULL;  // every round reset box
+
+        for (i = 0; i < units; i++) {
+            par = (idx + i) % units;
+            pthread_mutex_lock(&unit[par].lock);
+            b = unit[par].tmp;
+            if(b != NULL) {
+                unit[par].tmp = unit[par].tmp->next;
+                pthread_mutex_unlock(&unit[par].lock);
+                break;
+            }
+            pthread_mutex_unlock(&unit[par].lock);
+        }
+//        if (par == -1)
+//            return NULL;
+        if (b == NULL)
+            return NULL;
+        reduce(b->key, getNext, par);
     }
-    return NULL;
 }
 
 void MR_Emit(char *key, char *value) {
@@ -215,10 +231,10 @@ void MR_Emit(char *key, char *value) {
 
 unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
     unsigned long hash = 5381;
-    int c;
+    int c;    // printf("229-232| %s ", key);
     while ((c = *key++) != '\0')
         hash = hash * 33 + c;
-
+    // printf(" %lu \n", hash);
     return hash % num_partitions;
 }
 
@@ -238,7 +254,6 @@ void MR_Run(int argc, char *argv[],
     pthread_t * p_map = (pthread_t *)malloc(sizeof(pthread_t) * num_mappers);
     pthread_t* p_red = malloc(sizeof(pthread_t) * num_reducers);
     getUnit = partition;
-    myReduce = reduce;
 
     // [parse] the input
     assert(argc > 1);
@@ -262,20 +277,12 @@ void MR_Run(int argc, char *argv[],
 
     // [sort] they are already sorted... Just initialize iterator
     for (int i = 0; i < num_reducers; i++) {
-        //setIterUnit(&unit[i]);
-        rc = pthread_create(&p_red[i], NULL, setIterUnit, &unit[i]);
-        assert(rc == 0);
-    }
-    for (int i = 0; i < num_reducers; i++) {
-        rc = pthread_join(p_red[i], NULL);
-        assert(rc == 0);
+        setIterUnit(&unit[i]);
     }
 
     // [reduce]
-    int* t = malloc(sizeof(int) * num_reducers);
     for (int i = 0; i < num_reducers; i++) {
-        t[i] = i;
-        rc = pthread_create(&p_red[i], NULL, mySum, &t[i]);
+        rc = pthread_create(&p_red[i], NULL, mySum, reduce);
         assert(rc == 0);
     }
 
@@ -292,5 +299,4 @@ void MR_Run(int argc, char *argv[],
     free(unit);
     free(p_map);
     free(p_red);
-    free(t);
 }
