@@ -5,8 +5,9 @@
 #include <pthread.h>
 #include <assert.h>
 
-#define DATASIZE 50
-#define KEYSIZE  20
+#define BOXSIZE 100
+#define KEYSIZE  25
+#define VALUESIZE 25
 
 typedef struct __fpointer_t {   // file pointer
     int value;
@@ -18,115 +19,39 @@ static void init_fpointer(fpointer_t *c) {
     pthread_mutex_init(&c->lock, NULL);
 }
 
-typedef struct __data_t {       // store values in key
-    char* value;
-    struct __data_t* next;      // points to next element, [sorted]
-} data_t;
+typedef struct __pair_t {
+    char key[KEYSIZE];
+    char value[VALUESIZE];
+} pair_t;
 
-static void freeData(data_t* d) {
-    data_t* vim;
-    while (d != NULL) {
-        free(d->value);
-        vim = d;
-        d = d->next;
-        free(vim);
-    }
-}
-
-typedef struct __box_t {        // box [key, values]
-    char* key;
-    data_t* data;               // points to the data list
-    // size_t size;                // number of values in this box
-    struct __box_t* next;       // points to next box, [sorted]
-    pthread_mutex_t lock;
-    data_t* tmp;                // used during reduce for current
-} box_t;
-
-static void init_box(box_t *b, char* key) {
-    b->key = malloc(KEYSIZE * sizeof(char));
-    strcpy(b->key, key);
-    b->data = NULL;
-    // b->size = 0;
-    b->next = NULL;
-    pthread_mutex_init(&b->lock, NULL);
-}
-
-static void freeBox(box_t *b) {
-    box_t* vim;
-    while(b != NULL) {
-        free(b->key);
-        freeData(b->data);
-        vim = b;
-        b = b->next;
-        free(vim);
-    }
-
-}
-
-typedef struct __unit_t {       // unit, each is a partition
-    box_t* box;                 // [root] of box list for each partition
-    box_t* tmp;                 // try to remember current char*
+typedef struct __unit_t {        // unit, each is a partition
+    pair_t* box;                 // [root] of box list for each partition
+    int tmp;                 // try to remember current char*
+    int size;
+    int capacity;
     pthread_mutex_t lock;
 } unit_t;
 
 static void init_unit(unit_t *u) {
-    u->box = NULL;
+    u->box = calloc(BOXSIZE, sizeof(pair_t));
+    u->tmp = 0;
+    u->size = 0;
+    u->capacity = BOXSIZE;
     pthread_mutex_init(&u->lock, NULL);
 }
 
-static void freeUnit(unit_t* u) {
-    freeBox(u->box);        // printf("82| freeUnit\n");
-}
+static void addData(unit_t *u, char* key, char* value) {
+    pthread_mutex_lock(&u->lock);
 
-static box_t* getKey(unit_t *u, char* key) {        //  if key not exist,
-    pthread_mutex_lock(&u->lock);                   //      create and return
-    box_t * tmp = u->box;
-    box_t * prev = u->box;
-    while(tmp != NULL && strcmp(tmp->key, key)<0){
-        prev = tmp;
-        tmp = tmp->next;
+    if (u->size == u->capacity) {
+        u->capacity *= 2;
+        u->box = realloc(u->box, sizeof(pair_t) * u->capacity);
     }
-    if (tmp == NULL || strcmp(tmp->key, key) > 0) {
-        box_t * new = malloc(sizeof(box_t));
-        init_box(new, key);
-        if (prev == NULL)            // first key
-            tmp = u->box = new;
-        else {
-            if (tmp == u->box)          // insert in the front
-                u->box = new;
-            else
-                prev->next = new;
-            new->next = tmp;
-            tmp = new;
-        }
-        //u->size += 1;
-    }
+    strcpy(u->box[u->size].key, key);
+    strcpy(u->box[u->size].value, value);
+    u->size += 1;
+
     pthread_mutex_unlock(&u->lock);
-    return tmp;
-}
-
-static void addData(box_t *b, char* value) {
-    pthread_mutex_lock(&b->lock);
-    data_t * tmp = b->data;
-    data_t * prev = b->data;
-    while(tmp != NULL && strcmp(tmp->value, value) < 0){
-        prev = tmp;
-        tmp = tmp->next;
-    }
-    data_t *new = malloc(sizeof(data_t));
-    new->value = malloc(DATASIZE * sizeof(char));
-    strcpy(new->value, value);
-    new->next = tmp;
-    if (prev == NULL)           // first data
-        b->data = new;
-    else {
-        if (tmp == b->data)         // insert in the front
-            b->data = new;
-        else
-            prev->next = new;
-    }
-    // b->size += 1;
-    pthread_mutex_unlock(&b->lock);
 }
 
 // intermediate data strcutures section
@@ -136,7 +61,6 @@ static unit_t* unit;        // store the address of intermediate data structure
 static int units;
 
 static fpointer_t current;  // stores current file to be read
-static fpointer_t curunit;  // stores current unit
 static Partitioner getUnit;
 static Reducer myReduce;
 
@@ -157,59 +81,48 @@ static void *myRead(void *arg) {
     return NULL;
 }
 
-static void setIterBox(box_t* b) {
-    b->tmp = b->data;
+char* getNext(char* key, int index) {  // the data returned is dynamic!
+    int tmp = unit[index].tmp;
+    if (tmp >= unit[index].size)
+        return NULL;
+    pair_t *p = &unit[index].box[tmp];
+    if (strcmp(key, p->key) == 0) {
+        unit[index].tmp += 1;
+        return p->value;
+    }
+    else return NULL;
 }
 
-//static void setIterUnit(unit_t* u) {
-static void* setIterUnit(void* arg) {
-    unit_t* u = (unit_t*) arg;
-    u->tmp = u->box;
-    box_t* b = u->box;
-    while (b != NULL) {
-        setIterBox(b);
-        b = b->next;
-    }
+int myCompare(const void *a, const void *b) {
+    const pair_t* s1 = (pair_t* )a;
+    const pair_t* s2 = (pair_t* )b;
+    if (strcmp(s1->key, s2->key)==0)
+        return strcmp(s1->value, s2->value);
+    return strcmp(s1->key, s2->key);
+}
+
+static void *mySort(void *arg) {
+    unit_t *u = (unit_t *)arg;
+    qsort(u->box, (size_t )u->size, sizeof(pair_t), myCompare);
     return NULL;
-}
-
-char* getNext(char* key, int index) {  // the data returned is  dynamic!
-    box_t *b = unit[index].tmp;
-    if (strcmp(key, b->key) != 0) {
-        b = getKey(&unit[index], key);
-    }
-        if (b->tmp == NULL)
-            return NULL;
-    char* data  = b->tmp->value;
-    b->tmp = b->tmp->next;
-    return data;
 }
 
 static void *mySum(void *arg) {
     int idx = *(int *)arg;
-    box_t *b = unit[idx].box; // printf("? %d\n", idx);
-    while (b != NULL){
-        unit->tmp = b;
-        myReduce(b->key, getNext, idx);
-        b = b->next;
+    pair_t *p = unit[idx].box;
+    int size = unit[idx].size;
+    int tmp = 0;
+    while (tmp < size) {
+        char* key = p[tmp].key;
+        myReduce(key, getNext, idx);
+        tmp = unit[idx].tmp;
     }
     return NULL;
 }
 
 void MR_Emit(char *key, char *value) {
     unsigned long index = getUnit(key, units);
-
-    box_t* b = getKey(&unit[index], key);
-    addData(b, value); // printf("214| %lu %s\n", index, key);
-
-    // need data structure to store intermediate values
-    // can assume they fits in memory
-    // how multiple map threads are going to insert data into this data structure
-    // how do we get all the values for a particular key to the same reducer
-
-    // reducer need to wait for mappers
-    // -- getter functions needs all values for a key in the reducer
-    // -- reducer needs to see all keys in order
+    addData(&unit[index], key, value); // printf("214| %lu %s\n", index, key);
 
 }
 
@@ -228,7 +141,6 @@ void MR_Run(int argc, char *argv[],
             Partitioner partition) {
 
     init_fpointer(&current);
-    init_fpointer(&curunit);
 
     // [initialize]
     unit = malloc(num_reducers * sizeof(unit_t));
@@ -262,8 +174,7 @@ void MR_Run(int argc, char *argv[],
 
     // [sort] they are already sorted... Just initialize iterator
     for (int i = 0; i < num_reducers; i++) {
-        //setIterUnit(&unit[i]);
-        rc = pthread_create(&p_red[i], NULL, setIterUnit, &unit[i]);
+        rc = pthread_create(&p_red[i], NULL, mySort, &unit[i]);
         assert(rc == 0);
     }
     for (int i = 0; i < num_reducers; i++) {
@@ -285,9 +196,10 @@ void MR_Run(int argc, char *argv[],
         assert(rc == 0);
     }
 
+
     // [free] memory
     for (int i = 0; i < num_reducers; i++) {
-        freeUnit(&unit[i]);
+        free(unit[i].box);
     }
     free(unit);
     free(p_map);
