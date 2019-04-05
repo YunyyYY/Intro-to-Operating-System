@@ -22,17 +22,17 @@ In reduce stage, data access is sequential. Each pair is visited in sequence and
 ```tex
 array of partitions
 +------------+
-|						 |  ------> |<k1, v1>|<k2, v2>| ... |<kn, vn>|  array of <key, value> pairs
+|	     |  ------> |<k1, v1>|<k2, v2>| ... |<kn, vn>|  array of <key, value> pairs
 +------------+
-|						 |
+|	     |
 +------------+
-|						 |					For qsort, a comparison is defined for the <key, value> pairs
-		 ...								in each partition:
-|						 |					1. compare keys;
+|	     |					For qsort, a comparison is defined for the <key, value> pairs
+     ...					in each partition:
+|	     |					1. compare keys;
 +------------+					2. if keys are the same, compare values.
-|						 |
+|	     |
 +------------+
-|						 |
+|	     |
 +------------+
 ```
 
