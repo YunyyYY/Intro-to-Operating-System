@@ -26,10 +26,10 @@ array of partitions
 +------------+
 |	     |
 +------------+
-|	     |					For qsort, a comparison is defined for the <key, value> pairs
-     ...					in each partition:
-|	     |					1. compare keys;
-+------------+					2. if keys are the same, compare values.
+|	     |			For qsort, a comparison is defined for the <key, value> pairs
+     ...				in each partition:
+|	     |			1. compare keys;
++------------+			2. if keys are the same, compare values.
 |	     |
 +------------+
 |	     |
