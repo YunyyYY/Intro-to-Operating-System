@@ -82,7 +82,8 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int isthread;                // Indicate if this proc is a thread
-  struct thread tlist[NTHREAD];// Child thread list
+  void* ustack;                // virtual address of user space
+  // struct thread tlist[NTHREAD];// Child thread list
 };
 
 // Process memory is laid out contiguously, low addresses first:

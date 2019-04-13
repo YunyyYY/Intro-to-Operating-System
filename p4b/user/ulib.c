@@ -48,7 +48,8 @@ thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2)
   if (pid == 0) {
     printf(1, "input %x\n", stack);
     dummy();
-    // return -1;
+    // exit();
+    return -1;
   }
 
   return pid;

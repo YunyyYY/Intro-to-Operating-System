@@ -11,8 +11,8 @@ sys_dummy(void)
 {
   //cprintf("I am dummy\n");
   struct proc *p;
-  cprintf("proc: pid: %d, size: %x, stack: %x, pc: %x\n",
-          proc->pid, proc->sz, proc->tf->esp, proc->tf->eip);
+  cprintf("proc: pid: %d, size: %x, stack: %x, pc: %x. isthread: %d\n",
+          proc->pid, proc->sz, proc->tf->esp, proc->tf->eip, proc->isthread);
   p = proc->parent;
   cprintf("parent: pid: %d, size: %x, stack: %x, pc: %x\n",
           p->pid, p->sz, p->tf->esp, p->tf->eip);
