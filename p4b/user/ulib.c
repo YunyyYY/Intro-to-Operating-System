@@ -75,23 +75,36 @@ thread_join()
   return pid;
 }
 
-void
-lock_acquire(lock_t * l)
+static inline int fetch_and_add(int* variable)
 {
-  // acquire lock
+  int value = 1;
+  asm volatile("lock; xaddl %0, %1"
+  : "+r" (value), "+m" (*variable) // input+output
+  : // No input-only
+  : "memory"
+  );
+  return value;
 }
 
 void
-lock_release(lock_t * l)
+lock_init(lock_t * lock)
 {
-  // release lock
+  lock->ticket = 0;
+  lock->turn = 0;
 }
 
 void
-lock_init(lock_t * l)
+lock_acquire(lock_t * lock)
 {
-  // initialize the lock as need be
-  // it should only be called by one thread.
+  int myturn = fetch_and_add(&lock->ticket);
+  while (lock->turn != myturn)
+    ;
+}
+
+void
+lock_release(lock_t * lock)
+{
+  lock->turn = lock->turn + 1;
 }
 
 char*
