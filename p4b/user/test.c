@@ -4,7 +4,7 @@
  * - Varun Naik, Spring 2018
  * - Inspired by a test case from Spring 2016, last modified by Akshay Uttamani
  */
-/*
+
 
 #include "types.h"
 #include "stat.h"
@@ -104,7 +104,6 @@ multiple_thread_create(void)
 
   printf(1, "Creating and joining 10000 child threads...\n");
 
-  //dummy();
   for (i = 0; i < 10000; ++i) {
     ++global;
     pid1 = thread_create(&func2, NULL, NULL);
@@ -150,7 +149,7 @@ multiple_fork(void)
 int
 main(int argc, char *argv[])
 {
-  int count1, count2;
+  // int count1, count2;
   void *unused;
 
   ppid = getpid();
@@ -162,39 +161,29 @@ main(int argc, char *argv[])
           "Program uses too much memory, stack of main thread should be in first three pages"
   );
 
-  // With the given allocator, after this line, malloc() will (probably) not be
-  // page aligned
   unused = malloc(rdtsc() % (PGSIZE-1) + 1);
 
-  // printf(1, "161, at least here?\n");
-  // Try to fill up process table
-  count1 = fill_ptable();  // printf(1, "162, fill table 1 %d?\n", count1);
-  global = 0;
+//  count1 = fill_ptable();  printf(1, "162, fill table 1 %d?\n", count1);
+//  global = 0;
 
-  count2 = fill_ptable();  // printf(1, "164, fill table 2?\n");
-  global = 0;
-  check(count1 <= count2, "First round created more threads than second round");
+//  count2 = fill_ptable();  // printf(1, "164, fill table 2?\n");
+//  global = 0;
+//  check(count1 <= count2, "First round created more threads than second round");
 
   // Try to crash from a memory leak in thread_create() or thread_join()
   multiple_thread_create();
   global = 0;
 
-//printf(1, "171, finish create?\n");
-//
-//  // Try to crash from a memory leak in fork() or wait()
-//  multiple_fork();
-//
-//  //printf(1, "174, tried fork?\n");
-//
+  // Try to crash from a memory leak in fork() or wait()
+  multiple_fork();
+
   free(unused);
   printf(1, "PASSED TEST!\n");
   exit();
 }
-*/
 
 
-
-
+/*
 
 #include "types.h"
 #include "stat.h"
@@ -205,7 +194,6 @@ func(void * a, void * b) {
     // do nothing
     *(int *)a = 10;
     *(int *)b = getpid();
-    // dummy();
     //printf(1, "I'm  in func pid %d\n", *(int *)b);
     exit();
 }
@@ -217,8 +205,6 @@ main(int argc, char *argv[])
   a = 0;
   b = 1;
   int c;
-
-  // dummy();
 
   printf(1, "func is pointing at: %x\n", (uint)func);
   int i;
@@ -236,5 +222,5 @@ main(int argc, char *argv[])
 
   exit();
 }
-
+*/
 

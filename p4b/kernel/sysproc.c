@@ -30,9 +30,8 @@ sys_clone(void)
   if (argvoid(0, &fn)<0 || argvoid(1, &arg1)<0 ||
     argvoid(2, &arg2)<0 || argvoid(3, &stack)<0)
     return -1;
-  // cprintf("sysproc.c:21 %d %d\n", *(int* )arg1, *(int* )arg2);
+
   f = (void (*)(void *, void *))fn;
-  // cprintf("sysproc.c:35 parsed %x\n", (uint)stack);
   return clone(f, arg1, arg2, stack);
 }
 

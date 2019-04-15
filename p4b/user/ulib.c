@@ -28,7 +28,7 @@ thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2)
   void *stack = malloc(2 * MYPAGE);
   if (stack == 0)
     return -1;
-// printf(1, "malloc stack: %x ", stack);
+
   int idx  = 0;
   for (int i = 0; i < SSIZE; i++)  {
     if (stable[i].start == 0){
@@ -42,11 +42,17 @@ thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2)
     stack += MYPAGE - (uint)stack % MYPAGE;
     stable[idx].aligned = stack;
   }
-  // printf(1, "aligned %x\n", stack);
   int pid = clone(start_routine, arg1, arg2, stack);
 
+  if (pid == -1){
+    // dummy();
+    free(stable[idx].start);
+    stable[idx].start = stable[idx].aligned = 0;
+    return -1;
+  }
+
   if (pid == 0) {
-    printf(1, "input %x\n", stack);
+    printf(1, "pid == 0, stack at %x\n", stack);
     dummy();
     // exit();
     return -1;
