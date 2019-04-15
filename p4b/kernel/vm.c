@@ -312,8 +312,8 @@ copyuvm(pde_t *pgdir, uint sz)
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
-    if((mem = kalloc()) == 0)
-      goto bad;
+    if((mem = kalloc()) == 0){ cprintf("[copyuvm] kalloc return 0\n");
+      goto bad;}
     memmove(mem, (char*)pa, PGSIZE);
     if(mappages(d, (void*)i, PGSIZE, PADDR(mem), PTE_W|PTE_U) < 0)
       goto bad;

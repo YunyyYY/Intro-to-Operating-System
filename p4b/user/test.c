@@ -66,7 +66,7 @@ fill_ptable(void)
 {
   int num_threads, pid, status, i;
 
-  printf(1, "Creating child threads...\n");
+  printf(1, "max threads is %d\n", MAX_THREADS);
   for (i = 0; i < MAX_THREADS; ++i) {
     pid = thread_create(&func1, NULL, NULL); // printf(1, "pid %d\n", pid);
     if (pid != -1) {
@@ -126,6 +126,8 @@ multiple_fork(void)
   printf(1, "Forking and joining 100 child processes...\n");
   for (i = 0; i < 100; ++i) {
     pid = fork();
+    if (pid < 0)
+      printf(1,"%d\n", i);
     check(pid >= 0, "fork() failed");
 
     if (pid > 0) {
@@ -149,7 +151,7 @@ multiple_fork(void)
 int
 main(int argc, char *argv[])
 {
-  // int count1, count2;
+  int count1, count2;
   void *unused;
 
   ppid = getpid();
@@ -163,12 +165,13 @@ main(int argc, char *argv[])
 
   unused = malloc(rdtsc() % (PGSIZE-1) + 1);
 
-//  count1 = fill_ptable();  printf(1, "162, fill table 1 %d?\n", count1);
-//  global = 0;
+  count1 = fill_ptable();
+  global = 0;
+  count1 = 0;
 
-//  count2 = fill_ptable();  // printf(1, "164, fill table 2?\n");
-//  global = 0;
-//  check(count1 <= count2, "First round created more threads than second round");
+  count2 = fill_ptable();  // printf(1, "164, fill table 2?\n");
+  global = 0;
+  check(count1 <= count2, "First round created more threads than second round");
 
   // Try to crash from a memory leak in thread_create() or thread_join()
   multiple_thread_create();
@@ -189,6 +192,7 @@ main(int argc, char *argv[])
 #include "stat.h"
 #include "user.h"
 
+
 void
 func(void * a, void * b) {
     // do nothing
@@ -208,7 +212,7 @@ main(int argc, char *argv[])
 
   printf(1, "func is pointing at: %x\n", (uint)func);
   int i;
-  for  (i = 0; i < 10000; i++) {
+  for  (i = 0; i < 1; i++) {
     c = thread_create(func, &a, &b);
     thread_join();
   }

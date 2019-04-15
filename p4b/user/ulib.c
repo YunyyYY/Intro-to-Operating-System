@@ -9,39 +9,65 @@
 struct stack_pair {
     void* start;
     void* aligned;
+    // int used;
 };
 
-int init = 0;
+//int init = 0;
 
 struct stack_pair stable[SSIZE];
 
 int
 thread_create(void (*start_routine)(void *, void *), void *arg1, void *arg2)
 {
-  if (init == 0) {
-    for (int i = 0; i < SSIZE; i++) {
-      stable[i].start = stable[i].aligned = 0;
-      init = 1;
-    }
-  }
+//  if (init == 0) {
+//    for (int i = 0; i < SSIZE; i++) {
+//      stack = malloc(2 * MYPAGE);
+//      printf(1, "i: %d, stack is %x\n", i, stack);
+//      if (stack == 0)
+//        return -1;
+//      stable[i].start = stack;
+//      stable[i].aligned = (void *)((uint)(stack + MYPAGE -1) & ~(MYPAGE -1));
+//      stable[i].used = 0;
+//      //stable[i].start = stable[i].aligned = 0;
+//      init = 1;
+//    }
+//  }
+
+  // int pid; // printf(1, "%x\n", stack);
+//  for (int i = 0; i < SSIZE; i++) {
+//    //printf(1, "%x\n", stack);
+//    if (stable[i].used == 0){
+//      stack = stable[i].aligned;
+//      pid = clone(start_routine, arg1, arg2, stack);
+//      printf(1, "i: %d, stack is %x\n", i, stack);
+//      if (pid == -1)
+//        return -1;
+//      stable[i].used = 1;
+//      break;
+//    }
+//  }
 
   void *stack = malloc(2 * MYPAGE);
-  if (stack == 0)
-    return -1;
+  if (stack == 0) { printf(1, "[thread_create] malloc not enough memory\n");
+    return -1;}
 
   int idx  = 0;
-  for (int i = 0; i < SSIZE; i++)  {
+  for (int i = 0; i < SSIZE; i++) {
     if (stable[i].start == 0){
       idx = i;
-      stable[i].start = stable[i].aligned = stack;
+      stable[i].start = stack;
+      stable[i].aligned = (void *)((uint)(stack + MYPAGE -1) & ~(MYPAGE -1));
+      stack = stable[i].aligned;
       break;
     }
   }
 
-  if ((uint)stack % MYPAGE != 0) {
-    stack += MYPAGE - (uint)stack % MYPAGE;
-    stable[idx].aligned = stack;
-  }
+//  stack = (void *)((uint)(stack + MYPAGE -1) & ~(MYPAGE -1));
+//  stable[idx].aligned = stack;
+//  if ((uint)stack % MYPAGE != 0) {
+//    stack += MYPAGE - (uint)stack % MYPAGE;
+//    stable[idx].aligned = stack;
+//  }
   int pid = clone(start_routine, arg1, arg2, stack);
 
   if (pid == -1){
@@ -72,10 +98,13 @@ thread_join()
       // printf(1, "%x, %x, %x\n", stack, stable[i].aligned, stable[i].start);
       if (stack == stable[i].aligned){
         free(stable[i].start);
-        stable[i].start = stable[i].aligned = 0;
+        // stable[i].used = 0;
+        stable[i].aligned = stable[i].start = 0;
         break;
       }
     }
+  } else {
+    printf(1, "%x\n", stack);
   }
 
   return pid;

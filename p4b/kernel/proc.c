@@ -149,15 +149,12 @@ fork(void)
     return -1;}
 
   // Copy process state from p.
-  acquire(&ptable.lock);
   if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
     kfree(np->kstack);
     np->kstack = 0;
-    np->state = UNUSED;//cprintf("copy pgdir fail\n");
-    release(&ptable.lock);
+    np->state = UNUSED; cprintf("copy pgdir fail\n");
     return -1;
   }
-  release(&ptable.lock);
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
@@ -252,7 +249,7 @@ wait(void)
         struct proc *p2;
         int share_pgdir = 0;
         for (p2 = ptable.proc; p2 < &ptable.proc[NPROC]; p2++) {
-          if (p2->pgdir == p->pgdir) {
+          if (p2 != p && p2->pgdir == p->pgdir) {
             share_pgdir = 1;
             break;  // important to check that p2 is still executing!
           }
@@ -485,9 +482,9 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
 {
   void* stack = stk;
 
-  if ((uint)stack %PGSIZE != 0){cprintf("clone: page note aligned\n");
+  if ((uint)stack %PGSIZE != 0){cprintf("[clone] page note aligned\n");
     return -1;}
-  if (proc->sz < (uint)stack + PGSIZE){cprintf("clone: proc size not enough\n");
+  if (proc->sz < (uint)stack + PGSIZE){cprintf("[clone] proc size not enough\n");
     return -1;}
 
   int i, pid;
@@ -495,7 +492,7 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
   uint sp, ustack[3];
 
   // Allocate process.
-  if((np = allocproc()) == 0){cprintf("clone: allocproc fail\n");
+  if((np = allocproc()) == 0){cprintf("[clone] allocproc fail\n");
       return -1;}
 
   acquire(&ptable.lock);
@@ -523,7 +520,7 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
 
   sp = (uint) stack + 4096 - 3 * 4;        // first need to get stack right
   if(copyout(np->pgdir, sp, ustack, 3*4) < 0){
-    cprintf("clone: failed to copy pgdir\n");
+    cprintf("[clone] failed to copy pgdir\n");
     release(&ptable.lock);
     return -1;
   }
