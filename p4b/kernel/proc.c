@@ -220,9 +220,6 @@ exit(void)
   panic("zombie exit");
 }
 
-// Wait for a child process to exit and return its pid.
-// Return -1 if this process has no children.
-
 int
 wait(void)
 {
@@ -482,18 +479,18 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
 {
   void* stack = stk;
 
-  if ((uint)stack %PGSIZE != 0){cprintf("[clone] page note aligned\n");
-    return -1;}
-  if (proc->sz < (uint)stack + PGSIZE){cprintf("[clone] proc size not enough\n");
-    return -1;}
+  if ((uint)stack %PGSIZE != 0)//{cprintf("[clone] page note aligned\n");
+    return -1;
+  if (proc->sz < (uint)stack + PGSIZE)//{cprintf("[clone] proc size not enough\n");
+    return -1;
 
   int i, pid;
   struct proc *np;
   uint sp, ustack[3];
 
   // Allocate process.
-  if((np = allocproc()) == 0){cprintf("[clone] allocproc fail\n");
-      return -1;}
+  if((np = allocproc()) == 0)//{cprintf("[clone] allocproc fail\n");
+      return -1;
 
   acquire(&ptable.lock);
   np->sz = proc->sz;
@@ -520,7 +517,7 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
 
   sp = (uint) stack + 4096 - 3 * 4;        // first need to get stack right
   if(copyout(np->pgdir, sp, ustack, 3*4) < 0){
-    cprintf("[clone] failed to copy pgdir\n");
+    //cprintf("[clone] failed to copy pgdir\n");
     release(&ptable.lock);
     return -1;
   }
@@ -529,12 +526,6 @@ clone(void(*fn) (void *, void *), void *arg1, void *arg2, void *stk)
   np->tf->esp = sp;
   switchuvm(np);
 
-//  if (sp < proc->tf->esp + 4096){
-//    cprintf("parent %d %x, clone %d %x\n", proc->pid, proc->tf->esp, pid, sp);
-//  }
-
-
-  //cprintf("517 clone pid: %d\n", pid);
   release(&ptable.lock);
   return pid;
 }
@@ -556,21 +547,17 @@ join(void** stack)
   for(;;){
     // Scan through table looking for zombie children.
     havekids = 0;
-    //for(t = &proc->tlist[0]; t < &proc->tlist[NTHREAD]; t++){
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
 
-      //if(t->p == 0)
       if(p->parent != proc)
         continue;
       if(p->pgdir != proc->pgdir)
         continue;
 
-      havekids = 1;  // cprintf("have kids\n");
-      //if(t->p->state == ZOMBIE){
+      havekids = 1;
       if(p->state == ZOMBIE){
 
         // not in this thread's address space
-        // if ((uint)stack > (uint)t->stack + PGSIZE - 4) {
         if ((uint)stack > (uint)p->ustack + PGSIZE - 4) {
           havekids = 0;
           continue;
@@ -586,7 +573,7 @@ join(void** stack)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
-        release(&ptable.lock);//cprintf("joined pid = %d\n", pid);
+        release(&ptable.lock);
         return pid;
       }
     }
@@ -596,13 +583,6 @@ join(void** stack)
       return -1;
     }
 
-//    if (proc->pid > 3){
-//      cprintf("pid %d go to sleep, parent %d\n", proc->pid, proc->parent->pid);
-//      release(&ptable.lock);
-//      exit();
-//      return -1;
-//    }
-    // cprintf("pid %d go to sleep\n", proc->pid);
     sleep(proc, &ptable.lock);
   }
 }
