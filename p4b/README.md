@@ -12,18 +12,18 @@ The thread library should be available as part of every program that runs in xv6
 
 ```text
 USERTOP = 0xA0000	 	----------------------------
- 															(free)
+ 					  (free)
 			
-										----------------------------
- 															Heap 
-													(grows upwards)
-										----------------------------
- 															Stack
- 													(grows downwards)
-											(fixed-sized, one page)	
- 										----------------------------
-															Code
-ADDR = 0x0					----------------------------
+				----------------------------
+ 			   		   Heap 
+				      (grows upwards)
+				----------------------------
+ 					    Stack
+ 				      (grows downwards)
+				   (fixed-sized, one page)	
+ 				----------------------------
+					    Code
+ADDR = 0x0			----------------------------
 ```
 
 To create a thread for `clone()`, `thread_create()` passes the address of stack to `clone()`. However, since the stack for this new thread is allocated by `malloc()`, it gives the loweset address. To make it grow downwards, in `clone()`, the stack pointer should be pointed to the top of this page.
