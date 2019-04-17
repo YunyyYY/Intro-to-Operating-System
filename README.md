@@ -8,5 +8,6 @@ course projects for os
 - p3  [Virtual Memory](http://pages.cs.wisc.edu/~shivaram/cs537-sp19/p3.html)
 - p4a [MapReduce](http://pages.cs.wisc.edu/~shivaram/cs537-sp19/p4a.html)
 - p4b [Kernel Threads](http://pages.cs.wisc.edu/~shivaram/cs537-sp19/p4b.html)
+- p5  [File System Checking](http://pages.cs.wisc.edu/~shivaram/cs537-sp19/p5.html)
 
 Most projects are based on  the [xv6](https://pdos.csail.mit.edu/6.828/2014/xv6.html) system.
