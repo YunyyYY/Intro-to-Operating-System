@@ -21,14 +21,22 @@
 #define BITADDR(base, sb, db) base + sb*BSIZE + db/8
 #define BITOFF(data_block) data_block%8
 
+struct inodes_t {
+	int used;
+	int ref;
+	int parent;
+	int self;
+};
+
 // global data
 uint start_data, start_bitmap;
-int *record, *inode_used, *inode_ref;
+int *record;
+//int *record, *inode_used, *inode_ref;
+struct inodes_t *inodes = 0;
 struct dinode *dip;       	// point to inode in inode blocks
 uint a;                   	// used as the number of data block
 char* byte_addr;          	// used as address of byte for a bit
 uint* cat_ind;            	// used to check indirect address
-int error_flag;			// used as flag to check error
 int size, ninodes;
 void *img_ptr;
 
@@ -49,22 +57,22 @@ void print_inode(void *img_ptr, struct dinode dip) {
 	  		for (dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
 		  		dir < (struct xv6_dirent *)(img_ptr + (a+1)*BSIZE); dir++) {
 				if (dir == 0) continue;
-				else printf("%d %s\n", dir->inum, dir->name);
+				else printf("60: %d %s\n", dir->inum, dir->name);
 	  		}
 		}
   	}
 }
 
 void error(const char* s) {
-    printf("%s\n", s);
-    free(inode_used);
-	free(inode_ref);
+	fprintf(stderr,"%s\n", s);
+    free(inodes);
     exit(1);
 }
 
 void check_parent(int ind, int parent) {
 	struct xv6_dirent * dir;
 
+	// direct data blocks
 	for (int i = 0; i < NDIRECT; i++) {
       	if ((a = dip[parent].addrs[i]) == 0) continue;
       	if (a < start_data || a >= size)
@@ -75,6 +83,7 @@ void check_parent(int ind, int parent) {
 			if (dir[n].inum == ind) return;
 	}
 
+	// indirect data blocks
 	if ((a = dip[parent].addrs[NDIRECT]) != 0) {
 		if (a < start_data || a >= size)
       		error("ERROR: bad direct address in inode.");
@@ -92,29 +101,32 @@ void check_parent(int ind, int parent) {
 
 void check_dir_block(void *addr, int ind) {
 	struct xv6_dirent *dir = (struct xv6_dirent *)addr;
+	// printf("104: block: %d\n", ind);
 	for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
 		if (dir[n].inum == 0) continue;
 
 		if (dip[dir[n].inum].type == 1) {
 			if (strcmp(dir[n].name, ".") == 0) {
-			if (dir[n].inum != ind)
-				error("ERROR: directory not properly formatted.");
-			error_flag = 0;
+				if (dir[n].inum != ind)
+					error("ERROR: directory not properly formatted.");
+				inodes[ind].self = ind;
 			} else if (strcmp(dir[n].name, "..") == 0 ) {
+				if (inodes[ind].parent != 0 && inodes[ind].parent != dir[n].inum)
+					error("ERROR: parent directory mismatch.");
 				check_parent(ind, dir[n].inum);
-			} else if (inode_ref[dir[n].inum])
+				inodes[ind].parent = dir[n].inum; //printf("121: %d\n", dir[n].inum);
+			} else if (inodes[dir[n].inum].ref)
 				error("ERROR: directory appears more than once in file system.");
-		}	
-		// check inode number?
+			else
+				inodes[dir[n].inum].parent = ind;
+		} else
+			inodes[dir[n].inum].parent = ind;
+			// check inode number?
 		if (dir[n].inum < 0 || dir[n].inum > ninodes)
-			error("[check_dir_block]: wrong inode number");
-		inode_ref[dir[n].inum]++;
+			error("126 [check_dir_block]: wrong inode number");
+		inodes[dir[n].inum].ref++;
 	}
 }
-
-// ------------------------------------
-// 			main function
-// ------------------------------------
 
 int main(int argc, char *argv[]) {
 	int fd;
@@ -124,10 +136,9 @@ int main(int argc, char *argv[]) {
 		printf("Usage: xcheck <file_system_image>\n");
 		exit(1);
 	}
-  	if (fd < 0) {
-		printf("%s image not found\n", argv[1]);
-		exit(1);
-  	}
+  	if (fd < 0)
+  		error("image not found.");
+
 
  	struct stat sbuf;  // fstat() return information about a file.
   	fstat(fd, &sbuf);  // printf("Image is %ld in size\n", sbuf.st_size);
@@ -138,12 +149,11 @@ int main(int argc, char *argv[]) {
   		error("img_ptr == -1");
 
   	// ------------------------------------
-  	//   size 1024 nblocks 995 ninodes 200
 	//  finish check file, begin to set up
 	// ------------------------------------
 
   	struct superblock *sb = (struct superblock *) (img_ptr + BSIZE);
-  	printf("size %d, nblocks %d, ninodes %d\n", sb->size, sb->nblocks, sb->ninodes);
+	// printf("size %d, blocks %d, inodes %d\n", sb->size, sb->nblocks, sb->ninodes);
 
   	start_data = sb->ninodes/IPB + 4; 					// start of data block
   	start_bitmap = BBLOCK(start_data, sb->ninodes); 	// start of bitmap
@@ -152,10 +162,8 @@ int main(int argc, char *argv[]) {
   	record = calloc(sb->size, sizeof(int));				// for comparison with bitmap
 	for (int i = 0; i < start_data; i++)
 		record[i] = 1;
-	inode_used = calloc(sb->ninodes, sizeof(int));
-	inode_ref = calloc(sb->ninodes, sizeof(int));
-	inode_used[1] = inode_ref[1] = 1;
-  	error_flag = 1;
+	inodes = calloc(sb->ninodes, sizeof(struct inodes_t));
+	inodes[1].used = inodes[1].ref = 1;
   	struct xv6_dirent *dir;   	// point to directory entry in data blocks
 
 	// ---------------------------------
@@ -163,34 +171,33 @@ int main(int argc, char *argv[]) {
 	// ---------------------------------
 
   	// check root directory
-	dip = (struct dinode *) (img_ptr + 2*BSIZE);
+	dip = (struct dinode *) (img_ptr + 2*BSIZE); // print_inode(img_ptr, dip[1]);
 	if (dip[ROOTINO].type == 1) {
 		for (int i = 0; i < NDIRECT; i++) { // check every direct address
 			if ((a = dip[ROOTINO].addrs[i]) == 0) continue;
 			dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
 			for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
 				if (dir[n].inum == 0) continue;
-				if (dir[n].inum == ROOTINO) {
-					if (strcmp(dir[n].name, "..") == 0) error_flag = 0;
-					else if (strcmp(dir[n].name, ".") == 0) continue;
-					else { error_flag = 1; break; }
+				if (strcmp(dir[n].name, "..") == 0) {
+					if (dir[n].inum != ROOTINO)
+						error("ERROR: root directory does not exist.");
+					inodes[ROOTINO].parent = ROOTINO;
 				}
 			}
 		}
+
 	}
-	if (error_flag)
+	if (inodes[ROOTINO].parent > ROOTINO || dip[ROOTINO].type != 1)
 		error("ERROR: root directory does not exist.");
+
 
 	// check inodes and data blocks, from staring point of inode
 	for (int ind = 1; ind < sb->ninodes; ind++) {
     	if (dip[ind].type == 0) continue;
-
 		// check if inode is valid
     	if (dip[ind].type < 0 || dip[ind].type > 3) 
         	error("ERROR: bad inode.");
 
-      	// check direct data block addresses within inode
-      	error_flag = 1;
       	for (int i = 0; i < NDIRECT; i++) {
       		if ((a = dip[ind].addrs[i]) == 0) continue;
 
@@ -208,8 +215,6 @@ int main(int argc, char *argv[]) {
       		if (dip[ind].type == 1) 	// data block stores directory entries
       			check_dir_block((img_ptr + a*BSIZE), ind);
       	}
-      	if (dip[ind].type == 1 && error_flag)
-      		error("ERROR: directory not properly formatted.");
 
       	// check indirect addresses
       	if((a=dip[ind].addrs[NDIRECT]) != 0) {
@@ -235,9 +240,12 @@ int main(int argc, char *argv[]) {
         			check_dir_block((img_ptr + record[cat_ind[off]]*BSIZE), ind);
       		}
         	record[a] = 1;
-
       	}
-      	inode_used[ind] = 1;		// mark inode as used
+      	if (dip[ind].type == 1 && (inodes[ind].self != ind || !inodes[ind].parent))
+      		// printf("255: parent %d, self %d, ind %d\n", inodes[ind].parent, inodes[ind].self, ind);
+      		error("ERROR: directory not properly formatted.");
+
+      	inodes[ind].used = 1;		// mark inode as used
       	//printf("ind %d \n", ind);
 	}
 
@@ -249,20 +257,42 @@ int main(int argc, char *argv[]) {
 	}
 
 	for (int id = 0; id < sb->ninodes; id++) {
-		if (inode_used[id] == 0 && inode_ref[id] == 0) continue;
-		if (inode_ref[id] == 0){
-			printf("%d ", id);
+		if (inodes[id].used == 0 && inodes[id].ref == 0) continue;
+		if (inodes[id].ref == 0){
 			error("ERROR: inode marked use but not found in a directory.");
 		}
-		if (inode_used[id] == 0)
+		if (inodes[id].used == 0)
 			error("ERROR: inode referred to in directory but marked free.");
 		if (dip[id].type == 2) {
-			if (dip[id].nlink != inode_ref[id])
+			if (dip[id].nlink != inodes[id].ref)
 				error("ERROR: bad reference count for file.");
 		}
 	}
 
-	free(inode_used);
-	free(inode_ref);
+	// check if exists inaccessible directories
+	int fast, slow;
+	for (int i = 1; i < sb->ninodes; i++) {
+		if (!inodes[i].used) continue;
+		fast = slow = inodes[i].parent;
+		while (fast != 1) {
+			fast = inodes[fast].parent;
+			if (!fast || !inodes[fast].used)
+				//printf("291: %d parent: %d\n", i, inodes[fast].parent);
+				error("ERROR: inaccessible directory exists.");
+			if (fast == 1)
+				break;
+			fast = inodes[fast].parent;
+			if (!fast || !inodes[fast].used){
+				error("ERROR: inaccessible directory exists.");
+			}
+			if (fast == 1)
+				break;
+			slow = inodes[slow].parent;
+			if ((fast == slow) != 1)
+				error("ERROR: inaccessible directory exists.");
+		}
+	}
+
+	free(inodes);
 	return 0;
 }
