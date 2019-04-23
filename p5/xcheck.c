@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <limits.h>
 #include <string.h>
+#include <getopt.h>
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #define dirent xv6_dirent  // avoid clash with host struct
@@ -29,6 +30,7 @@ struct inodes_t {
 };
 
 // global data
+struct stat sbuf;  // fstat() return information about a file.
 uint start_data, start_bitmap;
 int *record;
 //int *record, *inode_used, *inode_ref;
@@ -56,8 +58,8 @@ void print_inode(void *img_ptr, struct dinode dip) {
 	  		if ((a = dip.addrs[i]) == 0) continue;
 	  		for (dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
 		  		dir < (struct xv6_dirent *)(img_ptr + (a+1)*BSIZE); dir++) {
-				if (dir == 0) continue;
-				else printf("60: %d %s\n", dir->inum, dir->name);
+				if (dir == 0 || dir->inum == 0) continue;
+				else printf("%d %s\n", dir->inum, dir->name);
 	  		}
 		}
   	}
@@ -96,12 +98,13 @@ void check_parent(int ind, int parent) {
 				if (dir[n].inum == ind) return;
 		}
 	}
+	// printf("self:\n"); print_inode(img_ptr, dip[ind]);
+	// printf("parent:\n"); print_inode(img_ptr, dip[parent]);
 	error("ERROR: parent directory mismatch.");
 }
 
 void check_dir_block(void *addr, int ind) {
 	struct xv6_dirent *dir = (struct xv6_dirent *)addr;
-	// printf("104: block: %d\n", ind);
 	for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
 		if (dir[n].inum == 0) continue;
 
@@ -121,17 +124,120 @@ void check_dir_block(void *addr, int ind) {
 				inodes[dir[n].inum].parent = ind;
 		} else
 			inodes[dir[n].inum].parent = ind;
-			// check inode number?
 		if (dir[n].inum < 0 || dir[n].inum > ninodes)
-			error("126 [check_dir_block]: wrong inode number");
+			error("ERROR: bad indirect address in inode.");
 		inodes[dir[n].inum].ref++;
 	}
+}
+
+void check_dir_block2(void *addr, int ind) {
+	struct xv6_dirent *dir = (struct xv6_dirent *)addr;
+	for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
+		if (dir[n].inum == 0) continue;		
+		inodes[dir[n].inum].ref++;
+	}
+}
+
+void repair(void *img_ptr) {
+	struct superblock *sb = (struct superblock *) (img_ptr + BSIZE);
+	start_data = sb->ninodes/IPB + 4; 					// start of data block
+  	start_bitmap = BBLOCK(start_data, sb->ninodes); 	// start of bitmap
+  	ninodes = sb->ninodes;								// number of inodes
+  	size = sb->size;									// size of file system
+	inodes = calloc(sb->ninodes, sizeof(struct inodes_t));
+	inodes[1].used = inodes[1].ref = 1;
+  	struct xv6_dirent *dir;   	// point to directory entry in data blocks
+  	int lost_found;
+
+	// find lost_found directory
+	dip = (struct dinode *) (img_ptr + 2*BSIZE);
+	if (dip[ROOTINO].type == 1) {
+		for (int i = 0; i < NDIRECT; i++) { // check every direct address
+			if ((a = dip[ROOTINO].addrs[i]) == 0) continue;
+			if (lost_found) break;
+			dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
+			for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
+				if (dir[n].inum == 0) continue;
+				if (strcmp(dir[n].name, "lost_found") == 0) {
+					lost_found = dir[n].inum;
+					break;
+				}
+			}
+		}
+		if((lost_found < 0 && (a=dip[ROOTINO].addrs[NDIRECT])) != 0) {
+        	cat_ind = (uint*)(img_ptr + a * BSIZE); // address of indirect address
+        	for (int off = 0; off < BSIZE/sizeof(uint); off++) {
+        		if (lost_found) break;
+        		if (cat_ind[off] == 0) continue;
+        		dir = (struct xv6_dirent *)(img_ptr + cat_ind[off]*BSIZE);
+        		for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
+					if (dir[n].inum == 0) continue; 
+					if (strcmp(dir[n].name, "lost_found") == 0) {
+						lost_found = dir[n].inum;
+						break;
+					}
+				}
+      		}
+      	}
+	}
+	for (int ind = 1; ind < sb->ninodes; ind++) {
+    	if (dip[ind].type == 0) continue;
+
+      	for (int i = 0; i < NDIRECT; i++) {
+      		if ((a = dip[ind].addrs[i]) == 0) continue;
+
+      		if (dip[ind].type == 1) 	// data block stores directory entries
+      			check_dir_block2((img_ptr + a*BSIZE), ind);
+      	}	// check indirect addresses
+      	if((a=dip[ind].addrs[NDIRECT]) != 0) {
+
+        	cat_ind = (uint*)(img_ptr + a * BSIZE); // address of indirect address
+        	for (int off = 0; off < BSIZE/sizeof(uint); off++) {
+        		if (cat_ind[off] == 0) continue;
+
+        		if (dip[ind].type == 1) // if inode is directory, need to check dir entries
+        			check_dir_block2((img_ptr + cat_ind[off]*BSIZE), ind);
+      		}
+      	}
+      	inodes[ind].used = 1;
+	}
+	int flag = 0;
+	for (int id = 0; id < sb->ninodes; id++) {
+		if (inodes[id].used == 0 && inodes[id].ref == 0) continue;
+		if (inodes[id].ref == 0){
+			flag = 1; // printf("ERROR: inode marked use but not found in a directory.\n");
+			for (int i = 0; i < NDIRECT; i++) {
+				if (!flag) break;
+				a = dip[lost_found].addrs[i];
+				dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
+        		for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
+					if (dir[n].inum == 0) {
+						dir[n].inum = id;
+						flag = 0;
+						break;
+					}
+				}
+			}
+		}
+	} // print_inode(img_ptr, dip[21]);
+	free(inodes);
 }
 
 int main(int argc, char *argv[]) {
 	int fd;
 	if (argc == 2) {
 		fd = open(argv[1], O_RDONLY);
+  	} else if (argc == 3) {  			// repair mode
+  		if (strcmp(argv[1], "-r") != 0)
+  			exit(1);
+  		fd = open(argv[2], O_RDWR);
+  		fstat(fd, &sbuf);
+  		img_ptr = mmap(NULL, sbuf.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  		if (img_ptr == (void *)-1)
+  			error("img_ptr == -1");
+  		repair(img_ptr);				// do repair job
+  		close(fd);
+  		return 0;
   	} else {
 		printf("Usage: xcheck <file_system_image>\n");
 		exit(1);
@@ -139,14 +245,11 @@ int main(int argc, char *argv[]) {
   	if (fd < 0)
   		error("image not found.");
 
-
- 	struct stat sbuf;  // fstat() return information about a file.
-  	fstat(fd, &sbuf);  // printf("Image is %ld in size\n", sbuf.st_size);
-
-  	// use mmap to map the file into virtual memory
+  	fstat(fd, &sbuf);  				// printf("Image is %ld in size\n", sbuf.st_size);
   	img_ptr = mmap(NULL, sbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  	if (img_ptr == (void *)-1)
+  	if (img_ptr == (void *)-1)  	// use mmap to map the file into virtual memory
   		error("img_ptr == -1");
+  	close(fd);
 
   	// ------------------------------------
 	//  finish check file, begin to set up
@@ -171,9 +274,9 @@ int main(int argc, char *argv[]) {
 	// ---------------------------------
 
   	// check root directory
-	dip = (struct dinode *) (img_ptr + 2*BSIZE); // print_inode(img_ptr, dip[1]);
+	dip = (struct dinode *) (img_ptr + 2*BSIZE);
 	if (dip[ROOTINO].type == 1) {
-		for (int i = 0; i < NDIRECT; i++) { // check every direct address
+		for (int i = 0; i < NDIRECT; i++) { // check every direct and indirect address
 			if ((a = dip[ROOTINO].addrs[i]) == 0) continue;
 			dir = (struct xv6_dirent *)(img_ptr + a*BSIZE);
 			for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
@@ -185,11 +288,26 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
-
-	}
-	if (inodes[ROOTINO].parent > ROOTINO || dip[ROOTINO].type != 1)
-		error("ERROR: root directory does not exist.");
-
+		if((a=dip[ROOTINO].addrs[NDIRECT]) != 0) {
+      		if (a < start_data || a >= sb->size)
+        		error("ERROR: bad indirect address in inode.");
+        	cat_ind = (uint*)(img_ptr + a * BSIZE); // address of indirect address
+        	for (int off = 0; off < BSIZE/sizeof(uint); off++) {
+        		if (cat_ind[off] == 0) continue;
+        		if (cat_ind[off] < start_data || cat_ind[off] >= sb->size)
+        			error("ERROR: bad indirect address in inode.");
+        		dir = (struct xv6_dirent *)(img_ptr + cat_ind[off]*BSIZE);
+        		for (int n = 0; n < BSIZE/sizeof(struct xv6_dirent); n++) {
+					if (dir[n].inum == 0) continue;
+					if (strcmp(dir[n].name, "..") == 0) {
+						if (dir[n].inum != ROOTINO)
+							error("ERROR: root directory does not exist.");
+						inodes[ROOTINO].parent = ROOTINO;
+					}
+				}
+      		}
+      	}
+	} else error("ERROR: root directory does not exist.");
 
 	// check inodes and data blocks, from staring point of inode
 	for (int ind = 1; ind < sb->ninodes; ind++) {
@@ -211,7 +329,6 @@ int main(int argc, char *argv[]) {
       			error("ERROR: address used by inode but marked free in bitmap.");
       		record[a] = 1;
 
-      		// assume that . and .. are both direct
       		if (dip[ind].type == 1) 	// data block stores directory entries
       			check_dir_block((img_ptr + a*BSIZE), ind);
       	}
@@ -237,16 +354,13 @@ int main(int argc, char *argv[]) {
         		// cat_ind[off] is a valid data block;
         		record[cat_ind[off]] = 1;
         		if (dip[ind].type == 1) // if inode is directory, need to check dir entries
-        			check_dir_block((img_ptr + record[cat_ind[off]]*BSIZE), ind);
+        			check_dir_block((img_ptr + cat_ind[off]*BSIZE), ind);
       		}
         	record[a] = 1;
       	}
       	if (dip[ind].type == 1 && (inodes[ind].self != ind || !inodes[ind].parent))
-      		// printf("255: parent %d, self %d, ind %d\n", inodes[ind].parent, inodes[ind].self, ind);
       		error("ERROR: directory not properly formatted.");
-
       	inodes[ind].used = 1;		// mark inode as used
-      	//printf("ind %d \n", ind);
 	}
 
 	// check bitmap consistency with data blocks
@@ -269,6 +383,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	// ---------------------------------
+	//     this part can be OPTIMIZED
+	// ---------------------------------	
+
 	// check if exists inaccessible directories
 	int fast, slow;
 	for (int i = 1; i < sb->ninodes; i++) {
@@ -277,7 +395,6 @@ int main(int argc, char *argv[]) {
 		while (fast != 1) {
 			fast = inodes[fast].parent;
 			if (!fast || !inodes[fast].used)
-				//printf("291: %d parent: %d\n", i, inodes[fast].parent);
 				error("ERROR: inaccessible directory exists.");
 			if (fast == 1)
 				break;
