@@ -1,3 +1,3 @@
-wish.c is the current version which has fixed all bugs from previous versions.
+wish.c is the submitted version.
 
 All the rest are kept as a sort of memorization...
